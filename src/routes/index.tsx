@@ -7,6 +7,14 @@ import { useAudioAnalyser } from "~/useAudioAnalyser";
 const COLORS = ["#4fb8b2", "#2f6a4a", "#328f97", "#7ed3bf"];
 const PULSE_COLORS = ["#4fb8b2", "#7ed3bf", "#2f6a4a"];
 
+const DISTORTION_OVERALL_SENSITIVITY = 0.9;
+const DISTORTION_BASS_SENSITIVITY = 0.3;
+const DISTORTION_MAX = 1.0;
+
+const SPEED_OVERALL_SENSITIVITY = 0.4;
+const SPEED_MID_SENSITIVITY = 0.2;
+const SPEED_MAX = 1.5;
+
 export const Route = createFileRoute("/")({
   component: Home,
 });
@@ -48,16 +56,21 @@ function Home() {
 
     if (!isListening) return base;
 
-    const { bass, mid, overall } = analysis;
+    const { overall, bass, mid } = analysis;
 
-    // Smooth but expressive: wave always moves, and pulses with voice tone/volume
+    // React to voice through distortion and speed, keeping scale steady
     return {
-      colors: COLORS,
-      distortion: Math.min(base.distortion + bass * 0.35 + overall * 0.15, 0.8),
-      swirl: Math.min(base.swirl + mid * 0.9 + overall * 0.08, 0.35),
-      scale: Math.min(base.scale + overall * 0.5 + bass * 0.04, 1.14),
-      speed: Math.min(base.scale + overall * 0.1 + bass * 0.04, 1.14),
-      rotation: 0,
+      ...base,
+      distortion: Math.min(
+        base.distortion +
+          overall * DISTORTION_OVERALL_SENSITIVITY +
+          bass * DISTORTION_BASS_SENSITIVITY,
+        DISTORTION_MAX,
+      ),
+      speed: Math.min(
+        base.speed + overall * SPEED_OVERALL_SENSITIVITY + mid * SPEED_MID_SENSITIVITY,
+        SPEED_MAX,
+      ),
     };
   }, [analysis, isListening]);
 
