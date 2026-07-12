@@ -1,11 +1,16 @@
 import { useVoiceInput } from "@cloudflare/voice/react";
 import { MeshGradient, PulsingBorder } from "@paper-design/shaders-react";
+import { interpolateLab } from "d3-interpolate";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useAudioAnalyser } from "~/useAudioAnalyser";
 
-const COLORS = ["#4fb8b2", "#2f6a4a", "#328f97", "#7ed3bf"];
-const PULSE_COLORS = ["#4fb8b2", "#7ed3bf", "#2f6a4a"];
+const COLORS = ["#a2d2ff", "#bde0fe", "#8ecae6", "#caf0f8"];
+const LISTENING_COLORS = ["#ffe8d6", "#ffd7ba", "#fec89a", "#f9c74f"];
+const PULSE_COLORS_DEFAULT = ["#5aa9e6", "#4a9ad9", "#6ab7ff", "#3d8bc6"];
+const PULSE_COLORS_LISTENING = ["#f7b267", "#f5a142", "#f4a261", "#e38b2a"];
+
+const COLOR_TRANSITION_DURATION_MS = 800;
 
 const DISTORTION_OVERALL_SENSITIVITY = 0.9;
 const DISTORTION_BASS_SENSITIVITY = 0.3;
@@ -14,6 +19,10 @@ const DISTORTION_MAX = 1.0;
 const SPEED_OVERALL_SENSITIVITY = 0.4;
 const SPEED_MID_SENSITIVITY = 0.2;
 const SPEED_MAX = 1.5;
+
+function blendPalettes(from: string[], to: string[], t: number): string[] {
+  return from.map((color, i) => interpolateLab(color, to[i % to.length])(t));
+}
 
 export const Route = createFileRoute("/")({
   component: Home,
@@ -41,12 +50,35 @@ function Home() {
   } = useAudioAnalyser();
 
   const [hasStarted, setHasStarted] = useState(false);
+  const [colorBlend, setColorBlend] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let rafId: number;
+    let startTime: number | null = null;
+    const startBlend = colorBlend;
+    const targetBlend = isListening ? 1 : 0;
+
+    const animate = (timestamp: number) => {
+      if (startTime === null) startTime = timestamp;
+      const elapsed = timestamp - startTime;
+      const rawProgress = Math.min(elapsed / COLOR_TRANSITION_DURATION_MS, 1);
+      const eased = 1 - Math.pow(1 - rawProgress, 3);
+      setColorBlend(startBlend + (targetBlend - startBlend) * eased);
+
+      if (rawProgress < 1) {
+        rafId = requestAnimationFrame(animate);
+      }
+    };
+
+    rafId = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(rafId);
+  }, [isListening]);
 
   const shaderProps = useMemo(() => {
     // Base values keep the wave moving smoothly even when silent
     const base = {
-      colors: COLORS,
+      colors: blendPalettes(COLORS, LISTENING_COLORS, colorBlend),
       distortion: 0.3,
       swirl: 0.9,
       speed: 0.6,
@@ -72,7 +104,7 @@ function Home() {
         SPEED_MAX,
       ),
     };
-  }, [analysis, isListening]);
+  }, [analysis, isListening, colorBlend]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -142,8 +174,9 @@ function Home() {
               fontFamily: "Georgia, 'Times New Roman', serif",
               fontSize: "1.25rem",
               lineHeight: 1.6,
-              color: "rgba(255, 255, 255, 0.92)",
-              textShadow: "0 0 20px rgba(79, 184, 178, 0.35)",
+              color: "#ffffff",
+              fontWeight: 500,
+              textShadow: "0 2px 20px rgba(0, 0, 0, 0.5), 0 0 6px rgba(0, 0, 0, 0.35)",
               whiteSpace: "pre-wrap",
             }}
           >
@@ -178,7 +211,7 @@ function Home() {
               <PulsingBorder
                 width={220}
                 height={220}
-                colors={PULSE_COLORS}
+                colors={PULSE_COLORS_DEFAULT}
                 colorBack="#00000000"
                 roundness={0.5}
                 thickness={0.15}
@@ -233,7 +266,7 @@ function Home() {
               <PulsingBorder
                 width={120}
                 height={120}
-                colors={PULSE_COLORS}
+                colors={isListening ? PULSE_COLORS_LISTENING : PULSE_COLORS_DEFAULT}
                 colorBack="#00000000"
                 roundness={0.5}
                 thickness={0.15}
