@@ -299,7 +299,13 @@ function Home() {
                 alignItems: "center",
                 justifyContent: "center",
                 cursor: "pointer",
-                boxShadow: "0 10px 30px rgba(0, 0, 0, 0.2)",
+                boxShadow: `
+                  0 1px 2px rgba(0, 0, 0, 0.12),
+                  0 4px 8px rgba(0, 0, 0, 0.14),
+                  0 12px 24px rgba(0, 0, 0, 0.18),
+                  0 24px 48px rgba(0, 0, 0, 0.22),
+                  inset 0 1px 1px rgba(255, 255, 255, 0.35)
+                `,
               }}
             >
               {isListening ? <StopIcon /> : <MicIcon size={28} />}
