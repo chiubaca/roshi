@@ -4,6 +4,11 @@ import { interpolateLab } from "d3-interpolate";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useAudioAnalyser } from "~/useAudioAnalyser";
+// PROTOTYPE (roshi#4) — throwaway UI variants, dev-only via ?variant=A|B|C.
+import { PrototypeSwitcher } from "./-prototype/PrototypeSwitcher";
+import { VariantA } from "./-prototype/VariantA";
+import { VariantB } from "./-prototype/VariantB";
+import { VariantC } from "./-prototype/VariantC";
 
 const COLORS = ["#a2d2ff", "#bde0fe", "#8ecae6", "#caf0f8"];
 const LISTENING_COLORS = ["#ffe8d6", "#ffd7ba", "#fec89a", "#f9c74f"];
@@ -25,10 +30,31 @@ function blendPalettes(from: string[], to: string[], t: number): string[] {
 }
 
 export const Route = createFileRoute("/")({
+  // PROTOTYPE (roshi#4) — ?variant=A|B|C renders throwaway UI variants in dev.
+  validateSearch: (search: Record<string, unknown>): { variant?: string } => ({
+    variant: typeof search.variant === "string" ? search.variant : undefined,
+  }),
   component: Home,
 });
 
 function Home() {
+  const { variant } = Route.useSearch();
+
+  if (import.meta.env.DEV && (variant === "A" || variant === "B" || variant === "C")) {
+    return (
+      <div style={{ position: "fixed", inset: 0, overflow: "hidden" }}>
+        {variant === "A" && <VariantA />}
+        {variant === "B" && <VariantB />}
+        {variant === "C" && <VariantC />}
+        <PrototypeSwitcher current={variant} />
+      </div>
+    );
+  }
+
+  return <VoiceHome />;
+}
+
+function VoiceHome() {
   const {
     transcript,
     interimTranscript,
@@ -359,6 +385,9 @@ function Home() {
           {error}
         </div>
       )}
+
+      {/* PROTOTYPE (roshi#4) — dev-only entry point into the UI variants */}
+      <PrototypeSwitcher />
     </div>
   );
 }
