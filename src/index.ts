@@ -2,11 +2,6 @@ import { Agent, routeAgentRequest, type Connection } from "agents";
 import { withVoiceInput, WorkersAINova3STT } from "@cloudflare/voice";
 import start from "@tanstack/react-start/server-entry";
 
-export type Env = {
-  AI: Ai;
-  VoiceAgent: DurableObjectNamespace<VoiceAgent>;
-};
-
 type State = {
   transcript: string;
 };

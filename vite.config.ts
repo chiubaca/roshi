@@ -3,8 +3,6 @@ import react from "@vitejs/plugin-react";
 import { defineConfig, lazyPlugins } from "vite-plus";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 
-const isVitest = Boolean(process.env.VITEST);
-
 export default defineConfig({
   server: {
     port: 3000,
@@ -21,13 +19,9 @@ export default defineConfig({
     rules: { "vite-plus/prefer-vite-plus-imports": "error" },
     options: { typeAware: true, typeCheck: true },
   },
-  plugins: lazyPlugins(() =>
-    isVitest
-      ? [tanstackStart(), react()]
-      : [cloudflare({ viteEnvironment: { name: "ssr" } }), tanstackStart(), react()],
-  ),
-  test: {
-    environment: "node",
-    globals: true,
-  },
+  plugins: lazyPlugins(() => [
+    cloudflare({ viteEnvironment: { name: "ssr" } }),
+    tanstackStart(),
+    react(),
+  ]),
 });
