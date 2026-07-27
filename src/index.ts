@@ -1,6 +1,7 @@
 import { Agent, routeAgentRequest, type Connection } from "agents";
 import { withVoiceInput, WorkersAINova3STT } from "@cloudflare/voice";
 import start from "@tanstack/react-start/server-entry";
+import { handleExemptRoute, requireAuth } from "./auth";
 
 type State = {
   transcript: string;
@@ -28,6 +29,12 @@ const startFetch = start.fetch as (
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext) {
+    const exemptResponse = await handleExemptRoute(request, env.ROSHI_PASSWORD);
+    if (exemptResponse) return exemptResponse;
+
+    const authResponse = await requireAuth(request, env.ROSHI_PASSWORD);
+    if (authResponse) return authResponse;
+
     // Cast to avoid a workers-types version mismatch between the request
     // shape expected by `agents` and the one provided by `ExportedHandler`.
     const agentResponse = await routeAgentRequest(request as Request, env);
