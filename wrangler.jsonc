@@ -10,12 +10,20 @@
         "name": "VoiceAgent",
         "class_name": "VoiceAgent",
       },
+      {
+        "name": "ConversationAgent",
+        "class_name": "ConversationAgent",
+      },
     ],
   },
   "migrations": [
     {
       "tag": "v1",
       "new_sqlite_classes": ["VoiceAgent"],
+    },
+    {
+      "tag": "v2",
+      "new_sqlite_classes": ["ConversationAgent"],
     },
   ],
   "ai": {

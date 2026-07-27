@@ -2,6 +2,9 @@ import { Agent, routeAgentRequest, type Connection } from "agents";
 import { withVoiceInput, WorkersAINova3STT } from "@cloudflare/voice";
 import start from "@tanstack/react-start/server-entry";
 import { handleExemptRoute, requireAuth } from "./auth";
+import { ConversationAgent } from "./conversation-agent";
+
+export { ConversationAgent };
 
 type State = {
   transcript: string;
