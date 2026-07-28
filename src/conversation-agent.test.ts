@@ -97,13 +97,11 @@ describe("ConversationAgent", () => {
   });
 
   it("titles the conversation from its first user message and records activity", async () => {
-    const conversationId = ulid();
-    const createdAt = "2026-07-20T10:00:00.000Z";
-    await env.DB.prepare(
-      "INSERT INTO conversations (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)",
-    )
-      .bind(conversationId, "New conversation", createdAt, createdAt)
-      .run();
+    const create = await authenticatedFetch("/api/conversations", { method: "POST" });
+    const created = (await create.json()) as { id: string; updatedAt: string };
+    const conversationId = created.id;
+    await new Promise((resolve) => setTimeout(resolve, 2));
+    await authenticatedFetch("/api/conversations", { method: "POST" });
     streamText.mockReturnValue({ toUIMessageStreamResponse: () => new Response() });
 
     const id = env.ConversationAgent.idFromName(conversationId);
@@ -120,21 +118,21 @@ describe("ConversationAgent", () => {
       await conversation.onChatMessage();
     });
 
-    const row = await env.DB.prepare("SELECT name, updated_at FROM conversations WHERE id = ?")
-      .bind(conversationId)
-      .first<{ name: string; updated_at: string }>();
-    expect(row).toEqual({ name: "Plan the next release, please", updated_at: expect.any(String) });
-    expect(row!.updated_at).not.toBe(createdAt);
+    const list = await authenticatedFetch("/api/conversations");
+    const conversations = (await list.json()) as { id: string; name: string; updatedAt: string }[];
+    const updated = conversations.find((conversation) => conversation.id === conversationId);
+    expect(conversations[0].id).toBe(conversationId);
+    expect(updated).toMatchObject({
+      id: conversationId,
+      name: "Plan the next release, please",
+      updatedAt: expect.any(String),
+    });
+    expect(updated!.updatedAt).not.toBe(created.updatedAt);
   });
 
   it("keeps the fallback title for a very short first message", async () => {
-    const conversationId = "01K0VNFKJQZ1RWNJBXH7K4T3V8";
-    const now = new Date().toISOString();
-    await env.DB.prepare(
-      "INSERT INTO conversations (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)",
-    )
-      .bind(conversationId, "New conversation", now, now)
-      .run();
+    const create = await authenticatedFetch("/api/conversations", { method: "POST" });
+    const { id: conversationId } = (await create.json()) as { id: string };
     streamText.mockReturnValue({ toUIMessageStreamResponse: () => new Response() });
 
     const stub = env.ConversationAgent.get(env.ConversationAgent.idFromName(conversationId));
@@ -146,10 +144,11 @@ describe("ConversationAgent", () => {
       await conversation.onChatMessage();
     });
 
-    const row = await env.DB.prepare("SELECT name FROM conversations WHERE id = ?")
-      .bind(conversationId)
-      .first<{ name: string }>();
-    expect(row).toEqual({ name: "New conversation" });
+    const list = await authenticatedFetch("/api/conversations");
+    const conversations = (await list.json()) as { id: string; name: string }[];
+    expect(conversations.find((conversation) => conversation.id === conversationId)?.name).toBe(
+      "New conversation",
+    );
   });
 
   it.skip("routes two different conversation IDs to separate DO instances (requires live runtime)", async () => {

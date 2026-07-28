@@ -47,6 +47,7 @@ export default {
       if (request.method === "POST") {
         return Response.json(await createConversation(env.DB), { status: 201 });
       }
+      return new Response("Method Not Allowed", { status: 405, headers: { Allow: "GET, POST" } });
     }
 
     // Cast to avoid a workers-types version mismatch between the request
