@@ -15,7 +15,7 @@ import {
 } from "react";
 import { useAudioAnalyser } from "~/useAudioAnalyser";
 
-const COLORS = ["#a2d2ff", "#bde0fe", "#8ecae6", "#caf0f8"];
+const DEFAULT_MESH_COLORS = ["#a2d2ff", "#bde0fe", "#8ecae6", "#caf0f8"];
 const LISTENING_COLORS = ["#ffe8d6", "#ffd7ba", "#fec89a", "#f9c74f"];
 const PULSE_COLORS_DEFAULT = ["#5aa9e6", "#4a9ad9", "#6ab7ff", "#3d8bc6"];
 const PULSE_COLORS_LISTENING = ["#f7b267", "#f5a142", "#f4a261", "#e38b2a"];
@@ -189,7 +189,7 @@ function ChatInner({
 
   const shaderProps = useMemo(() => {
     const base = {
-      colors: blendPalettes(COLORS, LISTENING_COLORS, colorBlend),
+      colors: blendPalettes(DEFAULT_MESH_COLORS, LISTENING_COLORS, colorBlend),
       distortion: 0.3,
       speed: 0.6,
     };
@@ -370,7 +370,7 @@ function ChatInner({
               type="button"
               aria-label={isListening ? "Stop listening" : "Start listening"}
               onClick={isListening ? handleVoiceStop : handleVoiceStart}
-              disabled={isStreaming}
+              disabled={isStreaming && !isListening}
               style={{
                 position: "relative",
                 zIndex: 1,
@@ -384,7 +384,7 @@ function ChatInner({
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                cursor: isStreaming ? "not-allowed" : "pointer",
+                cursor: isStreaming && !isListening ? "not-allowed" : "pointer",
               }}
             >
               {isListening ? <StopIcon /> : <MicIcon />}
