@@ -2,6 +2,7 @@ import { AIChatAgent } from "@cloudflare/ai-chat";
 import { createQuickActionTools } from "agents/browser/ai";
 import { createWorkersAI } from "workers-ai-provider";
 import { streamText, convertToModelMessages, stepCountIs } from "ai";
+import { recordConversationActivity } from "./conversation-index";
 
 function browserToolResult(result: string): Response {
   return new Response(JSON.stringify({ success: true, result }), {
@@ -11,6 +12,13 @@ function browserToolResult(result: string): Response {
 
 export class ConversationAgent extends AIChatAgent<Env> {
   async onChatMessage() {
+    const firstUserMessage = this.messages.find((message) => message.role === "user");
+    await recordConversationActivity(
+      this.env.DB,
+      this.name,
+      firstUserMessage ? messageText(firstUserMessage.parts) : undefined,
+    );
+
     const workersai = createWorkersAI({ binding: this.env.AI });
     const browser = {
       quickAction: async (...args: Parameters<BrowserRun["quickAction"]>) => {
@@ -40,4 +48,11 @@ export class ConversationAgent extends AIChatAgent<Env> {
 
     return result.toUIMessageStreamResponse();
   }
+}
+
+function messageText(parts: { type: string; text?: string }[]): string {
+  return parts
+    .filter((part) => part.type === "text" && typeof part.text === "string")
+    .map((part) => part.text)
+    .join("");
 }

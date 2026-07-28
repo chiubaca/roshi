@@ -96,6 +96,62 @@ describe("ConversationAgent", () => {
     expect(response.status).toBe(101);
   });
 
+  it("titles the conversation from its first user message and records activity", async () => {
+    const conversationId = ulid();
+    const createdAt = "2026-07-20T10:00:00.000Z";
+    await env.DB.prepare(
+      "INSERT INTO conversations (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)",
+    )
+      .bind(conversationId, "New conversation", createdAt, createdAt)
+      .run();
+    streamText.mockReturnValue({ toUIMessageStreamResponse: () => new Response() });
+
+    const id = env.ConversationAgent.idFromName(conversationId);
+    const stub = env.ConversationAgent.get(id);
+    await runInDurableObject(stub, async (agent) => {
+      const conversation = agent as import("./conversation-agent").ConversationAgent;
+      conversation.messages = [
+        {
+          id: "message-1",
+          role: "user",
+          parts: [{ type: "text", text: "Plan the next release, please!" }],
+        },
+      ];
+      await conversation.onChatMessage();
+    });
+
+    const row = await env.DB.prepare("SELECT name, updated_at FROM conversations WHERE id = ?")
+      .bind(conversationId)
+      .first<{ name: string; updated_at: string }>();
+    expect(row).toEqual({ name: "Plan the next release, please", updated_at: expect.any(String) });
+    expect(row!.updated_at).not.toBe(createdAt);
+  });
+
+  it("keeps the fallback title for a very short first message", async () => {
+    const conversationId = "01K0VNFKJQZ1RWNJBXH7K4T3V8";
+    const now = new Date().toISOString();
+    await env.DB.prepare(
+      "INSERT INTO conversations (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)",
+    )
+      .bind(conversationId, "New conversation", now, now)
+      .run();
+    streamText.mockReturnValue({ toUIMessageStreamResponse: () => new Response() });
+
+    const stub = env.ConversationAgent.get(env.ConversationAgent.idFromName(conversationId));
+    await runInDurableObject(stub, async (agent) => {
+      const conversation = agent as import("./conversation-agent").ConversationAgent;
+      conversation.messages = [
+        { id: "message-1", role: "user", parts: [{ type: "text", text: "Hi" }] },
+      ];
+      await conversation.onChatMessage();
+    });
+
+    const row = await env.DB.prepare("SELECT name FROM conversations WHERE id = ?")
+      .bind(conversationId)
+      .first<{ name: string }>();
+    expect(row).toEqual({ name: "New conversation" });
+  });
+
   it.skip("routes two different conversation IDs to separate DO instances (requires live runtime)", async () => {
     const id1 = ulid();
     const id2 = "01K0VNFKJQZ1RWNJBXH7K4T3V8";
