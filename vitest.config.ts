@@ -8,6 +8,9 @@ export default defineConfig({
     cloudflareTest({
       main: "./src/index.ts",
       remoteBindings: false,
+      miniflare: {
+        bindings: { ROSHI_PASSWORD: "test-password" },
+      },
       wrangler: {
         configPath: "./wrangler.jsonc",
       },

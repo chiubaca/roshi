@@ -3,6 +3,12 @@ allowBuilds:
   esbuild: true
   sharp: true
   workerd: true
+minimumReleaseAgeExclude:
+  - "@cloudflare/ai-chat@0.10.1"
+  - "@modelcontextprotocol/client@2.0.0"
+  - "@modelcontextprotocol/core@2.0.0"
+  - "@modelcontextprotocol/server@2.0.0"
+  - agents@0.20.1
 overrides:
   vite: npm:@voidzero-dev/vite-plus-core@latest
   vitest: 4.1.9

@@ -73,10 +73,7 @@ describe("ConversationAgent", () => {
     expect(response.status).toBe(401);
   });
 
-  // AIChatAgent's constructor calls host._withAgentSpan which is unavailable in
-  // the vitest-pool-workers runtime. These tests must run against a real Worker
-  // deployment or the wrangler dev server. Skipped until the runtime supports it.
-  it.skip("allows authenticated WebSocket upgrades to ConversationAgent (requires live runtime)", async () => {
+  it("allows authenticated WebSocket upgrades to ConversationAgent", async () => {
     const conversationId = ulid();
     const response = await authenticatedFetch(`/agents/conversation-agent/${conversationId}`, {
       headers: { Upgrade: "websocket" },
