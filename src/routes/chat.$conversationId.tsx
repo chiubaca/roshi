@@ -145,6 +145,25 @@ function ChatInner({
             >
               {msg.parts?.map((part, i) => {
                 if (part.type === "text") return <span key={i}>{part.text}</span>;
+                if (part.type.startsWith("tool-browser_")) {
+                  return (
+                    <span
+                      key={i}
+                      style={{
+                        display: "inline-flex",
+                        margin: "0.1rem 0.35rem 0.1rem 0",
+                        padding: "0.2rem 0.5rem",
+                        borderRadius: "999px",
+                        background: "rgba(59, 130, 246, 0.18)",
+                        color: "#93c5fd",
+                        fontFamily: "system-ui, sans-serif",
+                        fontSize: "0.75rem",
+                      }}
+                    >
+                      {part.type.replace("tool-browser_", "Browser: ").replaceAll("_", " ")}
+                    </span>
+                  );
+                }
                 return null;
               })}
             </div>

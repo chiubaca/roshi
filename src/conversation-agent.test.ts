@@ -1,5 +1,15 @@
-import { exports } from "cloudflare:workers";
-import { describe, expect, it } from "vite-plus/test";
+/// <reference types="@cloudflare/vitest-pool-workers/types" />
+
+import { env, exports } from "cloudflare:workers";
+import { runInDurableObject } from "cloudflare:test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+
+const streamText = vi.hoisted(() => vi.fn());
+
+vi.mock("ai", async (importOriginal) => {
+  const ai = await importOriginal<typeof import("ai")>();
+  return { ...ai, streamText };
+});
 
 const COOKIE_NAME = "roshi_session";
 const PASSWORD = "test-password";
@@ -43,6 +53,11 @@ function ulid(): string {
 }
 
 describe("ConversationAgent", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    streamText.mockReset();
+  });
+
   it("rejects unauthenticated chat page requests", async () => {
     const conversationId = ulid();
     const response = await exports.default.fetch(new Request(`${BASE_URL}/chat/${conversationId}`));
@@ -95,4 +110,65 @@ describe("ConversationAgent", () => {
     expect(ws1.status).toBe(101);
     expect(ws2.status).toBe(101);
   });
+
+  it("returns bounded Markdown from Browser Run to the model", async () => {
+    const markdown = "a".repeat(50_100);
+    vi.spyOn(env.BROWSER, "quickAction").mockResolvedValue(
+      new Response(JSON.stringify({ success: true, result: markdown })),
+    );
+    streamText.mockReturnValue({
+      toUIMessageStreamResponse: () => new Response(),
+    });
+
+    const tools = await browserTools();
+    expect(tools).toMatchObject({
+      browser_extract: expect.any(Object),
+      browser_links: expect.any(Object),
+      browser_scrape: expect.any(Object),
+    });
+    const result = await tools.browser_markdown.execute({ url: "https://example.com/article" });
+
+    expect(result).toContain("[truncated 100 characters]");
+    expect(result.length).toBeLessThan(50_100);
+    expect(env.BROWSER.quickAction).toHaveBeenCalledWith("markdown", {
+      url: "https://example.com/article",
+    });
+  });
+
+  it("returns Browser Run errors to the model instead of terminating the stream", async () => {
+    vi.spyOn(env.BROWSER, "quickAction").mockResolvedValue(
+      new Response("rate limited", { status: 429, headers: { "Retry-After": "20" } }),
+    );
+    streamText.mockReturnValue({
+      toUIMessageStreamResponse: () => new Response(),
+    });
+
+    const tools = await browserTools();
+    const result = await tools.browser_markdown.execute({ url: "https://example.com/article" });
+
+    expect(result).toContain("HTTP 429");
+    expect(result).toContain("Retry after 20 seconds");
+  });
 });
+
+async function browserTools() {
+  const id = env.ConversationAgent.idFromName(crypto.randomUUID());
+  const stub = env.ConversationAgent.get(id);
+
+  await runInDurableObject(stub, async (agent) => {
+    await (agent as import("./conversation-agent").ConversationAgent).onChatMessage();
+  });
+
+  expect(streamText).toHaveBeenCalledTimes(1);
+  const options = streamText.mock.calls[0][0] as {
+    tools: {
+      browser_markdown: {
+        execute(input: { url: string }): Promise<string>;
+      };
+      browser_extract: object;
+      browser_links: object;
+      browser_scrape: object;
+    };
+  };
+  return options.tools;
+}
