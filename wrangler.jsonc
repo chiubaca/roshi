@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "roshi-voice-to-text",
+  "name": "roshi",
   "main": "src/index.ts",
   "compatibility_date": "2025-07-01",
   "compatibility_flags": ["nodejs_compat"],
@@ -10,12 +10,20 @@
         "name": "VoiceAgent",
         "class_name": "VoiceAgent",
       },
+      {
+        "name": "ConversationAgent",
+        "class_name": "ConversationAgent",
+      },
     ],
   },
   "migrations": [
     {
       "tag": "v1",
       "new_sqlite_classes": ["VoiceAgent"],
+    },
+    {
+      "tag": "v2",
+      "new_sqlite_classes": ["ConversationAgent"],
     },
   ],
   "ai": {
