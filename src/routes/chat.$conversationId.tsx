@@ -125,7 +125,7 @@ function ChatInner({
     stop: voiceStop,
   } = useVoiceInput({
     agent: "VoiceAgent",
-    name: "demo",
+    name: conversationId,
   });
   const {
     start: startAnalyser,
