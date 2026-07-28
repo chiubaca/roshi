@@ -2,7 +2,7 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "roshi",
   "main": "src/index.ts",
-  "compatibility_date": "2025-07-01",
+  "compatibility_date": "2026-07-28",
   "compatibility_flags": ["nodejs_compat"],
   "durable_objects": {
     "bindings": [
@@ -28,5 +28,9 @@
   ],
   "ai": {
     "binding": "AI",
+  },
+  "browser": {
+    "binding": "BROWSER",
+    "remote": true,
   },
 }
