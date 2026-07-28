@@ -13,7 +13,6 @@
     "allowJs": true,
     "noEmit": true,
     "forceConsistentCasingInFileNames": true,
-    "types": ["@cloudflare/workers-types", "@cloudflare/workers-types/experimental"],
     "paths": {
       "~/*": ["./src/*"]
     }

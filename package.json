@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vp dev",
-    "build": "vp build && tsc --noEmit",
+    "build": "wrangler types && vp build && tsc --noEmit",
     "preview": "vp preview",
     "deploy": "vp run build && wrangler deploy",
     "types": "wrangler types",
