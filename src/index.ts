@@ -3,6 +3,7 @@ import { withVoiceInput, WorkersAINova3STT } from "@cloudflare/voice";
 import start from "@tanstack/react-start/server-entry";
 import { handleExemptRoute, requireAuth } from "./auth";
 import { ConversationAgent } from "./conversation-agent";
+import { createConversation, listConversations } from "./conversation-index";
 
 export { ConversationAgent };
 
@@ -37,6 +38,17 @@ export default {
 
     const authResponse = await requireAuth(request, env.ROSHI_PASSWORD);
     if (authResponse) return authResponse;
+
+    const url = new URL(request.url);
+    if (url.pathname === "/api/conversations") {
+      if (request.method === "GET") {
+        return Response.json(await listConversations(env.DB));
+      }
+      if (request.method === "POST") {
+        return Response.json(await createConversation(env.DB), { status: 201 });
+      }
+      return new Response("Method Not Allowed", { status: 405, headers: { Allow: "GET, POST" } });
+    }
 
     // Cast to avoid a workers-types version mismatch between the request
     // shape expected by `agents` and the one provided by `ExportedHandler`.

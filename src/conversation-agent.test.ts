@@ -96,6 +96,61 @@ describe("ConversationAgent", () => {
     expect(response.status).toBe(101);
   });
 
+  it("titles the conversation from its first user message and records activity", async () => {
+    const create = await authenticatedFetch("/api/conversations", { method: "POST" });
+    const created = (await create.json()) as { id: string; updatedAt: string };
+    const conversationId = created.id;
+    await new Promise((resolve) => setTimeout(resolve, 2));
+    await authenticatedFetch("/api/conversations", { method: "POST" });
+    streamText.mockReturnValue({ toUIMessageStreamResponse: () => new Response() });
+
+    const id = env.ConversationAgent.idFromName(conversationId);
+    const stub = env.ConversationAgent.get(id);
+    await runInDurableObject(stub, async (agent) => {
+      const conversation = agent as import("./conversation-agent").ConversationAgent;
+      conversation.messages = [
+        {
+          id: "message-1",
+          role: "user",
+          parts: [{ type: "text", text: "Plan the next release, please!" }],
+        },
+      ];
+      await conversation.onChatMessage();
+    });
+
+    const list = await authenticatedFetch("/api/conversations");
+    const conversations = (await list.json()) as { id: string; name: string; updatedAt: string }[];
+    const updated = conversations.find((conversation) => conversation.id === conversationId);
+    expect(conversations[0].id).toBe(conversationId);
+    expect(updated).toMatchObject({
+      id: conversationId,
+      name: "Plan the next release, please",
+      updatedAt: expect.any(String),
+    });
+    expect(updated!.updatedAt).not.toBe(created.updatedAt);
+  });
+
+  it("keeps the fallback title for a very short first message", async () => {
+    const create = await authenticatedFetch("/api/conversations", { method: "POST" });
+    const { id: conversationId } = (await create.json()) as { id: string };
+    streamText.mockReturnValue({ toUIMessageStreamResponse: () => new Response() });
+
+    const stub = env.ConversationAgent.get(env.ConversationAgent.idFromName(conversationId));
+    await runInDurableObject(stub, async (agent) => {
+      const conversation = agent as import("./conversation-agent").ConversationAgent;
+      conversation.messages = [
+        { id: "message-1", role: "user", parts: [{ type: "text", text: "Hi" }] },
+      ];
+      await conversation.onChatMessage();
+    });
+
+    const list = await authenticatedFetch("/api/conversations");
+    const conversations = (await list.json()) as { id: string; name: string }[];
+    expect(conversations.find((conversation) => conversation.id === conversationId)?.name).toBe(
+      "New conversation",
+    );
+  });
+
   it.skip("routes two different conversation IDs to separate DO instances (requires live runtime)", async () => {
     const id1 = ulid();
     const id2 = "01K0VNFKJQZ1RWNJBXH7K4T3V8";
