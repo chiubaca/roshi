@@ -1,6 +1,7 @@
 /// <reference types="@cloudflare/vitest-pool-workers/types" />
 
-import { exports } from "cloudflare:workers";
+import { env, exports } from "cloudflare:workers";
+import { runInDurableObject } from "cloudflare:test";
 import { describe, expect, it } from "vite-plus/test";
 
 const BASE_URL = "http://example.com";
@@ -58,5 +59,71 @@ describe("conversation index Worker boundary", () => {
       newerConversation.id,
       conversation.id,
     ]);
+  });
+
+  it("renames a conversation through the Worker and persists the new name", async () => {
+    const create = await authenticatedFetch("/api/conversations", { method: "POST" });
+    const conversation = (await create.json()) as { id: string; name: string };
+
+    const rename = await authenticatedFetch(`/api/conversations/${conversation.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ name: "Release planning" }),
+      headers: { "Content-Type": "application/json" },
+    });
+
+    expect(rename.status).toBe(200);
+    expect(await rename.json()).toMatchObject({
+      id: conversation.id,
+      name: "Release planning",
+    });
+    const renamedRow = await env.DB.prepare("SELECT name FROM conversations WHERE id = ?")
+      .bind(conversation.id)
+      .first<{ name: string }>();
+    expect(renamedRow).toEqual({ name: "Release planning" });
+
+    const list = await authenticatedFetch("/api/conversations");
+    const conversations = (await list.json()) as { id: string; name: string }[];
+    expect(conversations).toContainEqual(
+      expect.objectContaining({ id: conversation.id, name: "Release planning" }),
+    );
+  });
+
+  it("hard deletes the index row and Durable Object messages through the Worker", async () => {
+    const create = await authenticatedFetch("/api/conversations", { method: "POST" });
+    const { id: conversationId } = (await create.json()) as { id: string };
+    const stub = env.ConversationAgent.get(env.ConversationAgent.idFromName(conversationId));
+    await runInDurableObject(stub, async (agent) => {
+      const conversation = agent as import("./conversation-agent").ConversationAgent;
+      await conversation.persistMessages([
+        { id: "message-1", role: "user", parts: [{ type: "text", text: "Keep this secret" }] },
+      ]);
+    });
+
+    const remove = await authenticatedFetch(`/api/conversations/${conversationId}`, {
+      method: "DELETE",
+    });
+
+    expect(remove.status).toBe(204);
+    const deletedRow = await env.DB.prepare("SELECT id FROM conversations WHERE id = ?")
+      .bind(conversationId)
+      .first<{ id: string }>();
+    expect(deletedRow).toBeNull();
+    const list = await authenticatedFetch("/api/conversations");
+    const conversations = (await list.json()) as { id: string }[];
+    expect(conversations).not.toContainEqual(expect.objectContaining({ id: conversationId }));
+    const chat = await authenticatedFetch(`/chat/${conversationId}`);
+    expect(chat.status).toBe(404);
+    const agent = await authenticatedFetch(`/agents/conversation-agent/${conversationId}`, {
+      headers: { Upgrade: "websocket" },
+    });
+    expect(agent.status).toBe(404);
+    await runInDurableObject(stub, async (agent) => {
+      const conversation = agent as import("./conversation-agent").ConversationAgent;
+      expect(conversation.messages).toEqual([]);
+      const state = conversation as unknown as { ctx: DurableObjectState };
+      expect(() => state.ctx.storage.sql.exec("SELECT * FROM cf_ai_chat_agent_messages")).toThrow(
+        /no such table/i,
+      );
+    });
   });
 });

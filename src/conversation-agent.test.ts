@@ -65,7 +65,8 @@ describe("ConversationAgent", () => {
   });
 
   it("serves the chat page when authenticated", async () => {
-    const conversationId = ulid();
+    const create = await authenticatedFetch("/api/conversations", { method: "POST" });
+    const { id: conversationId } = (await create.json()) as { id: string };
     const response = await authenticatedFetch(`/chat/${conversationId}`);
 
     expect(response.status).toBe(200);
@@ -86,7 +87,8 @@ describe("ConversationAgent", () => {
   });
 
   it("allows authenticated WebSocket upgrades to ConversationAgent", async () => {
-    const conversationId = ulid();
+    const create = await authenticatedFetch("/api/conversations", { method: "POST" });
+    const { id: conversationId } = (await create.json()) as { id: string };
     const response = await authenticatedFetch(`/agents/conversation-agent/${conversationId}`, {
       headers: { Upgrade: "websocket" },
     });

@@ -16,6 +16,7 @@ function Launcher() {
   const navigate = useNavigate();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [creating, setCreating] = useState(false);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
 
   useEffect(() => {
     void fetch("/api/conversations")
@@ -37,6 +38,42 @@ function Launcher() {
       await navigate({ to: "/chat/$conversationId", params: { conversationId: conversation.id } });
     } finally {
       setCreating(false);
+    }
+  }
+
+  async function renameConversation(conversation: Conversation) {
+    const name = window.prompt("Conversation name", conversation.name)?.trim();
+    if (!name || updatingId) return;
+
+    setUpdatingId(conversation.id);
+    try {
+      const response = await fetch(`/api/conversations/${conversation.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ name }),
+        headers: { "Content-Type": "application/json" },
+      });
+      if (!response.ok) throw new Error("Could not rename conversation");
+      const renamed = (await response.json()) as Conversation;
+      setConversations((current) =>
+        current.map((item) => (item.id === renamed.id ? renamed : item)),
+      );
+    } finally {
+      setUpdatingId(null);
+    }
+  }
+
+  async function deleteConversation(conversation: Conversation) {
+    if (updatingId || !window.confirm(`Delete “${conversation.name}”? This cannot be undone.`)) {
+      return;
+    }
+
+    setUpdatingId(conversation.id);
+    try {
+      const response = await fetch(`/api/conversations/${conversation.id}`, { method: "DELETE" });
+      if (!response.ok) throw new Error("Could not delete conversation");
+      setConversations((current) => current.filter((item) => item.id !== conversation.id));
+    } finally {
+      setUpdatingId(null);
     }
   }
 
@@ -69,22 +106,43 @@ function Launcher() {
             {creating ? "Creating..." : "+ New conversation"}
           </button>
           {conversations.map((conversation) => (
-            <button
-              type="button"
-              key={conversation.id}
-              onClick={() =>
-                navigate({
-                  to: "/chat/$conversationId",
-                  params: { conversationId: conversation.id },
-                })
-              }
-              style={conversationStyle}
-            >
-              <span>{conversation.name}</span>
-              <time dateTime={conversation.updatedAt} style={timeStyle}>
-                {relativeTime(conversation.updatedAt)}
-              </time>
-            </button>
+            <div key={conversation.id} style={conversationRowStyle}>
+              <button
+                type="button"
+                onClick={() =>
+                  navigate({
+                    to: "/chat/$conversationId",
+                    params: { conversationId: conversation.id },
+                  })
+                }
+                style={conversationStyle}
+              >
+                <span>{conversation.name}</span>
+                <time dateTime={conversation.updatedAt} style={timeStyle}>
+                  {relativeTime(conversation.updatedAt)}
+                </time>
+              </button>
+              <div style={actionStyle}>
+                <button
+                  type="button"
+                  aria-label={`Rename ${conversation.name}`}
+                  disabled={updatingId !== null}
+                  onClick={() => void renameConversation(conversation)}
+                  style={actionButtonStyle}
+                >
+                  Rename
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Delete ${conversation.name}`}
+                  disabled={updatingId !== null}
+                  onClick={() => void deleteConversation(conversation)}
+                  style={deleteButtonStyle}
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
           ))}
         </div>
       </section>
@@ -173,7 +231,41 @@ const newConversationStyle: React.CSSProperties = {
   fontWeight: 650,
 };
 
-const conversationStyle: React.CSSProperties = baseRowStyle;
+const conversationRowStyle: React.CSSProperties = {
+  alignItems: "center",
+  borderBottom: "1px solid rgba(255, 255, 255, 0.1)",
+  display: "flex",
+};
+
+const conversationStyle: React.CSSProperties = {
+  ...baseRowStyle,
+  borderBottom: 0,
+  flex: 1,
+  minWidth: 0,
+};
+
+const actionStyle: React.CSSProperties = {
+  display: "flex",
+  gap: "0.35rem",
+  paddingRight: "1rem",
+};
+
+const actionButtonStyle: React.CSSProperties = {
+  background: "transparent",
+  border: "1px solid rgba(255, 255, 255, 0.25)",
+  borderRadius: "0.35rem",
+  color: "#f5f1e8",
+  cursor: "pointer",
+  fontFamily: "system-ui, sans-serif",
+  fontSize: "0.75rem",
+  padding: "0.35rem 0.5rem",
+};
+
+const deleteButtonStyle: React.CSSProperties = {
+  ...actionButtonStyle,
+  borderColor: "rgba(252, 165, 165, 0.55)",
+  color: "#fca5a5",
+};
 
 const timeStyle: React.CSSProperties = {
   color: "rgba(245, 241, 232, 0.58)",

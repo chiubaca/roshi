@@ -47,6 +47,52 @@ export async function listConversations(db: D1Database): Promise<Conversation[]>
   return results.map(toConversation);
 }
 
+export async function renameConversation(
+  db: D1Database,
+  id: string,
+  name: string,
+): Promise<Conversation | undefined> {
+  await db
+    .prepare("UPDATE conversations SET name = ?, updated_at = ? WHERE id = ?")
+    .bind(name, new Date().toISOString(), id)
+    .run();
+  return getConversation(db, id);
+}
+
+export async function getConversation(
+  db: D1Database,
+  id: string,
+): Promise<Conversation | undefined> {
+  const row = await db
+    .prepare("SELECT id, name, created_at, updated_at, model, tags FROM conversations WHERE id = ?")
+    .bind(id)
+    .first<ConversationRow>();
+  return row ? toConversation(row) : undefined;
+}
+
+export async function deleteConversation(db: D1Database, id: string): Promise<void> {
+  await db.prepare("DELETE FROM conversations WHERE id = ?").bind(id).run();
+}
+
+export async function restoreConversation(
+  db: D1Database,
+  conversation: Conversation,
+): Promise<void> {
+  await db
+    .prepare(
+      "INSERT INTO conversations (id, name, created_at, updated_at, model, tags) VALUES (?, ?, ?, ?, ?, ?)",
+    )
+    .bind(
+      conversation.id,
+      conversation.name,
+      conversation.createdAt,
+      conversation.updatedAt,
+      conversation.model,
+      conversation.tags ? JSON.stringify(conversation.tags) : null,
+    )
+    .run();
+}
+
 export async function recordConversationActivity(
   db: D1Database,
   id: string,
