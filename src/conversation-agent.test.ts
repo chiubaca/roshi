@@ -3,17 +3,15 @@
 import { env, exports } from "cloudflare:workers";
 import { runInDurableObject } from "cloudflare:test";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-
-const streamText = vi.hoisted(() => vi.fn());
-
-vi.mock("ai", async (importOriginal) => {
-  const ai = await importOriginal<typeof import("ai")>();
-  return { ...ai, streamText };
-});
+import { createBrowserTools } from "./conversation-agent";
 
 const COOKIE_NAME = "roshi_session";
 const PASSWORD = "test-password";
 const BASE_URL = "http://example.com";
+
+type BrowserTool<Input> = {
+  execute(input: Input, options: unknown): Promise<unknown>;
+};
 
 async function postLogin(password: string): Promise<Response> {
   return exports.default.fetch(
@@ -55,7 +53,6 @@ function ulid(): string {
 describe("ConversationAgent", () => {
   afterEach(() => {
     vi.restoreAllMocks();
-    streamText.mockReset();
   });
 
   it("rejects unauthenticated chat page requests", async () => {
@@ -102,8 +99,6 @@ describe("ConversationAgent", () => {
     const conversationId = created.id;
     await new Promise((resolve) => setTimeout(resolve, 2));
     await authenticatedFetch("/api/conversations", { method: "POST" });
-    streamText.mockReturnValue({ toUIMessageStreamResponse: () => new Response() });
-
     const id = env.ConversationAgent.idFromName(conversationId);
     const stub = env.ConversationAgent.get(id);
     await runInDurableObject(stub, async (agent) => {
@@ -133,8 +128,6 @@ describe("ConversationAgent", () => {
   it("keeps the fallback title for a very short first message", async () => {
     const create = await authenticatedFetch("/api/conversations", { method: "POST" });
     const { id: conversationId } = (await create.json()) as { id: string };
-    streamText.mockReturnValue({ toUIMessageStreamResponse: () => new Response() });
-
     const stub = env.ConversationAgent.get(env.ConversationAgent.idFromName(conversationId));
     await runInDurableObject(stub, async (agent) => {
       const conversation = agent as import("./conversation-agent").ConversationAgent;
@@ -171,17 +164,18 @@ describe("ConversationAgent", () => {
     vi.spyOn(env.BROWSER, "quickAction").mockResolvedValue(
       new Response(JSON.stringify({ success: true, result: markdown })),
     );
-    streamText.mockReturnValue({
-      toUIMessageStreamResponse: () => new Response(),
-    });
-
-    const tools = await browserTools();
+    const tools = createBrowserTools(env.BROWSER);
     expect(tools).toMatchObject({
       browser_extract: expect.any(Object),
       browser_links: expect.any(Object),
       browser_scrape: expect.any(Object),
     });
-    const result = await tools.browser_markdown.execute({ url: "https://example.com/article" });
+    expect(tools).not.toHaveProperty("browser_content");
+    const browserMarkdown = tools.browser_markdown as unknown as BrowserTool<{ url: string }>;
+    const result = (await browserMarkdown.execute(
+      { url: "https://example.com/article" },
+      {},
+    )) as string;
 
     expect(result).toContain("[truncated 100 characters]");
     expect(result.length).toBeLessThan(50_100);
@@ -194,36 +188,71 @@ describe("ConversationAgent", () => {
     vi.spyOn(env.BROWSER, "quickAction").mockResolvedValue(
       new Response("rate limited", { status: 429, headers: { "Retry-After": "20" } }),
     );
-    streamText.mockReturnValue({
-      toUIMessageStreamResponse: () => new Response(),
-    });
-
-    const tools = await browserTools();
-    const result = await tools.browser_markdown.execute({ url: "https://example.com/article" });
+    const tools = createBrowserTools(env.BROWSER);
+    const browserMarkdown = tools.browser_markdown as unknown as BrowserTool<{ url: string }>;
+    const result = (await browserMarkdown.execute(
+      { url: "https://example.com/article" },
+      {},
+    )) as string;
 
     expect(result).toContain("HTTP 429");
     expect(result).toContain("Retry after 20 seconds");
   });
-});
 
-async function browserTools() {
-  const id = env.ConversationAgent.idFromName(crypto.randomUUID());
-  const stub = env.ConversationAgent.get(id);
+  it("returns Browser Run exceptions to the model", async () => {
+    vi.spyOn(env.BROWSER, "quickAction").mockRejectedValue(new Error("navigation timed out"));
+    const tools = createBrowserTools(env.BROWSER);
+    const browserMarkdown = tools.browser_markdown as unknown as BrowserTool<{ url: string }>;
+    const result = (await browserMarkdown.execute(
+      { url: "https://example.com/article" },
+      {},
+    )) as string;
 
-  await runInDurableObject(stub, async (agent) => {
-    await (agent as import("./conversation-agent").ConversationAgent).onChatMessage();
+    expect(result).toContain("Browser Run could not complete this request");
+    expect(result).toContain("navigation timed out");
   });
 
-  expect(streamText).toHaveBeenCalledTimes(1);
-  const options = streamText.mock.calls[0][0] as {
-    tools: {
-      browser_markdown: {
-        execute(input: { url: string }): Promise<string>;
-      };
-      browser_extract: object;
-      browser_links: object;
-      browser_scrape: object;
-    };
-  };
-  return options.tools;
-}
+  it("returns unsuccessful Browser Run responses to the model", async () => {
+    vi.spyOn(env.BROWSER, "quickAction").mockResolvedValue(
+      new Response(
+        JSON.stringify({ success: false, errors: [{ message: "daily limit reached" }] }),
+      ),
+    );
+    const tools = createBrowserTools(env.BROWSER);
+    const browserMarkdown = tools.browser_markdown as unknown as BrowserTool<{ url: string }>;
+    const result = (await browserMarkdown.execute(
+      { url: "https://example.com/article" },
+      {},
+    )) as string;
+
+    expect(result).toContain("Browser Run could not complete this request");
+  });
+
+  it("routes link and extraction requests to their Browser Run actions", async () => {
+    const quickAction = vi.spyOn(env.BROWSER, "quickAction");
+    quickAction.mockImplementation(async () => {
+      return new Response(JSON.stringify({ success: true, result: [] }));
+    });
+    const tools = createBrowserTools(env.BROWSER);
+    const browserLinks = tools.browser_links as unknown as BrowserTool<{ url: string }>;
+    const browserExtract = tools.browser_extract as unknown as BrowserTool<{
+      url: string;
+      prompt: string;
+    }>;
+
+    await browserLinks.execute({ url: "https://example.com/article" }, {});
+    await browserExtract.execute(
+      { url: "https://example.com/article", prompt: "List the author names" },
+      {},
+    );
+
+    expect(quickAction).toHaveBeenNthCalledWith(1, "links", {
+      url: "https://example.com/article",
+    });
+    expect(quickAction).toHaveBeenNthCalledWith(2, "json", {
+      url: "https://example.com/article",
+      prompt: "List the author names",
+      response_format: undefined,
+    });
+  });
+});

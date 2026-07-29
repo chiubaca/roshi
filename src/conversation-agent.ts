@@ -10,6 +10,39 @@ function browserToolResult(result: string): Response {
   });
 }
 
+export function createBrowserTools(browserBinding: BrowserRun) {
+  const browser = {
+    quickAction: async (...args: Parameters<BrowserRun["quickAction"]>) => {
+      try {
+        const response = await browserBinding.quickAction(...args);
+        if (response.ok) {
+          try {
+            const payload = (await response.clone().json()) as {
+              success?: boolean;
+              result?: unknown;
+            };
+            if (payload.success !== false && payload.result !== undefined) return response;
+            return browserToolResult("Browser Run could not complete this request.");
+          } catch {
+            return browserToolResult("Browser Run returned an invalid response.");
+          }
+        }
+
+        const retryAfter = response.headers.get("Retry-After");
+        const retry = retryAfter ? ` Retry after ${retryAfter} seconds.` : "";
+        return browserToolResult(
+          `Browser Run could not complete this request (HTTP ${response.status}).${retry}`,
+        );
+      } catch (error) {
+        const detail = error instanceof Error ? error.message.slice(0, 200) : "Unknown error";
+        return browserToolResult(`Browser Run could not complete this request: ${detail}`);
+      }
+    },
+  } as BrowserRun;
+
+  return createQuickActionTools({ browser, maxChars: 50_000 });
+}
+
 export class ConversationAgent extends AIChatAgent<Env> {
   async onChatMessage() {
     const firstUserMessage = this.messages.find((message) => message.role === "user");
@@ -20,29 +53,11 @@ export class ConversationAgent extends AIChatAgent<Env> {
     );
 
     const workersai = createWorkersAI({ binding: this.env.AI });
-    const browser = {
-      quickAction: async (...args: Parameters<BrowserRun["quickAction"]>) => {
-        try {
-          const response = await this.env.BROWSER.quickAction(...args);
-          if (response.ok) return response;
-
-          const retryAfter = response.headers.get("Retry-After");
-          const retry = retryAfter ? ` Retry after ${retryAfter} seconds.` : "";
-          return browserToolResult(
-            `Browser Run could not complete this request (HTTP ${response.status}).${retry}`,
-          );
-        } catch (error) {
-          const detail = error instanceof Error ? error.message.slice(0, 200) : "Unknown error";
-          return browserToolResult(`Browser Run could not complete this request: ${detail}`);
-        }
-      },
-    } as BrowserRun;
-
     const result = streamText({
       model: workersai("@cf/zai-org/glm-4.7-flash"),
       system: "You are Roshi, a helpful AI assistant.",
       messages: await convertToModelMessages(this.messages),
-      tools: createQuickActionTools({ browser, maxChars: 50_000 }),
+      tools: createBrowserTools(this.env.BROWSER),
       stopWhen: stepCountIs(5),
     });
 
