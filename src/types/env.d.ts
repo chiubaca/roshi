@@ -3,4 +3,5 @@
 // so the value never lives in committed configuration.
 declare interface Env {
   ROSHI_PASSWORD: string;
+  TAVILY_API_KEY: string;
 }

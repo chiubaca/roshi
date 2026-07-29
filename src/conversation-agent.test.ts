@@ -2,8 +2,10 @@
 
 import { env, exports } from "cloudflare:workers";
 import { runInDurableObject } from "cloudflare:test";
-import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import { createBrowserTools } from "./conversation-agent";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import * as ai from "ai";
+import * as workersAIProvider from "workers-ai-provider";
+import { createBrowserTools, createWebSearchTools } from "./conversation-agent";
 
 const COOKIE_NAME = "roshi_session";
 const PASSWORD = "test-password";
@@ -51,9 +53,24 @@ function ulid(): string {
 }
 
 describe("ConversationAgent", () => {
+  beforeEach(() => {
+    stubModel();
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
+
+  function stubModel(reply = "") {
+    const streamText = vi.spyOn(ai, "streamText");
+    const createWorkersAI = vi.spyOn(workersAIProvider, "createWorkersAI");
+    createWorkersAI.mockReturnValue((() => ({})) as never);
+    streamText.mockReturnValue({
+      toUIMessageStreamResponse: () => new Response(reply),
+    } as never);
+    return streamText;
+  }
 
   it("rejects unauthenticated chat page requests", async () => {
     const conversationId = ulid();
@@ -255,6 +272,97 @@ describe("ConversationAgent", () => {
       url: "https://example.com/article",
       prompt: "List the author names",
       response_format: undefined,
+    });
+  });
+
+  it("returns compact Tavily results to the model", async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      Response.json({
+        results: [
+          {
+            title: "Roshi release notes",
+            url: "https://example.com/releases",
+            content: "The current release is 1.2.3.",
+            raw_content: "This page content must not reach the model.",
+          },
+        ],
+      }),
+    );
+    const tools = createWebSearchTools("test-key", fetch);
+    const webSearch = tools.webSearch as unknown as BrowserTool<{
+      query: string;
+      maxResults: number;
+    }>;
+
+    const result = await webSearch.execute(
+      { query: "latest Roshi release", maxResults: 5 },
+      { abortSignal: AbortSignal.abort() },
+    );
+
+    expect(result).toEqual({
+      results: [
+        {
+          title: "Roshi release notes",
+          url: "https://example.com/releases",
+          snippet: "The current release is 1.2.3.",
+        },
+      ],
+    });
+    expect(fetch).toHaveBeenCalledWith(
+      "https://api.tavily.com/search",
+      expect.objectContaining({
+        method: "POST",
+        signal: expect.any(AbortSignal),
+      }),
+    );
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({
+      api_key: "test-key",
+      query: "latest Roshi release",
+      max_results: 5,
+    });
+  });
+
+  it("returns Tavily failures as a structured tool result", async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response("rate limited", { status: 429 }));
+    const tools = createWebSearchTools("test-key", fetch);
+    const webSearch = tools.webSearch as unknown as BrowserTool<{
+      query: string;
+      maxResults: number;
+    }>;
+
+    const result = await webSearch.execute({ query: "latest Roshi release", maxResults: 5 }, {});
+
+    expect(result).toEqual({ error: "Web search is temporarily unavailable (HTTP 429)." });
+  });
+
+  it("passes web search results through the ConversationAgent tool boundary", async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      Response.json({
+        results: [
+          { title: "Release notes", url: "https://example.com/releases", content: "1.2.3" },
+        ],
+      }),
+    );
+    vi.stubGlobal("fetch", fetch);
+    const streamText = stubModel("[Release notes](https://example.com/releases)");
+    const conversationId = ulid();
+    const stub = env.ConversationAgent.get(env.ConversationAgent.idFromName(conversationId));
+
+    await runInDurableObject(stub, async (agent) => {
+      const conversation = agent as import("./conversation-agent").ConversationAgent;
+      conversation.messages = [
+        { id: "message-1", role: "user", parts: [{ type: "text", text: "Latest release?" }] },
+      ];
+      const response = await conversation.onChatMessage();
+      expect(await response.text()).toContain("[Release notes](https://example.com/releases)");
+    });
+
+    const tools = streamText.mock.calls[0][0].tools as ReturnType<typeof createWebSearchTools>;
+    const result = await (
+      tools.webSearch as unknown as BrowserTool<{ query: string; maxResults: number }>
+    ).execute({ query: "latest release", maxResults: 5 }, {});
+    expect(result).toEqual({
+      results: [{ title: "Release notes", url: "https://example.com/releases", snippet: "1.2.3" }],
     });
   });
 });

@@ -20,6 +20,68 @@ const LISTENING_COLORS = ["#ffe8d6", "#ffd7ba", "#fec89a", "#f9c74f"];
 const PULSE_COLORS_DEFAULT = ["#5aa9e6", "#4a9ad9", "#6ab7ff", "#3d8bc6"];
 const PULSE_COLORS_LISTENING = ["#f7b267", "#f5a142", "#f4a261", "#e38b2a"];
 
+type SearchResult = { title: string; url: string; snippet: string };
+
+function searchResults(output: unknown): SearchResult[] {
+  if (!output || typeof output !== "object" || !("results" in output)) return [];
+  const results = (output as { results?: unknown }).results;
+  if (!Array.isArray(results)) return [];
+  return results.flatMap((result) => {
+    if (!result || typeof result !== "object") return [];
+    const { title, url, snippet } = result as Partial<SearchResult>;
+    return typeof title === "string" && typeof url === "string" && typeof snippet === "string"
+      ? [{ title, url, snippet }]
+      : [];
+  });
+}
+
+export function SearchToolChip({ output }: { output: unknown }) {
+  const results = searchResults(output);
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "0.35rem",
+        margin: "0.1rem 0.35rem 0.1rem 0",
+        padding: "0.2rem 0.5rem",
+        borderRadius: "999px",
+        background: "rgba(59, 130, 246, 0.18)",
+        color: "#93c5fd",
+        fontFamily: "ui-monospace, SFMono-Regular, monospace",
+        fontSize: "0.75rem",
+      }}
+    >
+      Web search
+      {results.map((result) => (
+        <a
+          key={result.url}
+          href={result.url}
+          target="_blank"
+          rel="noreferrer"
+          style={{ color: "inherit" }}
+        >
+          {result.title}
+        </a>
+      ))}
+    </span>
+  );
+}
+
+export function CitationText({ text }: { text: string }) {
+  const parts = text.split(/(\[[^\]]+\]\(https?:\/\/[^)]+\))/g);
+  return parts.map((part, index) => {
+    const match = /^\[([^\]]+)\]\((https?:\/\/[^)]+)\)$/.exec(part);
+    return match ? (
+      <a key={index} href={match[2]} target="_blank" rel="noreferrer" style={{ color: "#93c5fd" }}>
+        {match[1]}
+      </a>
+    ) : (
+      <span key={index}>{part}</span>
+    );
+  });
+}
+
 function blendPalettes(from: string[], to: string[], t: number): string[] {
   return from.map((color, i) => interpolateLab(color, to[i % to.length])(t));
 }
@@ -279,7 +341,9 @@ function ChatInner({
               }}
             >
               {msg.parts?.map((part, i) => {
-                if (part.type === "text") return <span key={i}>{part.text}</span>;
+                if (part.type === "text") return <CitationText key={i} text={part.text} />;
+                if (part.type === "tool-webSearch")
+                  return <SearchToolChip key={i} output={part.output} />;
                 if (part.type.startsWith("tool-browser_")) {
                   return (
                     <span
