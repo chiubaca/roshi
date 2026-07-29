@@ -34,7 +34,7 @@ function ChatPage() {
   return (
     <div
       style={{
-        minHeight: "100vh",
+        height: "100vh",
         color: "#e2e8f0",
         fontFamily: '"Georgia", "Times New Roman", serif',
         display: "flex",
@@ -54,7 +54,8 @@ function ChatPage() {
           padding: "2rem 1rem",
           display: "flex",
           flexDirection: "column",
-          minHeight: "100vh",
+          height: "100vh",
+          boxSizing: "border-box",
         }}
       >
         <ChatPanel conversationId={conversationId} />
