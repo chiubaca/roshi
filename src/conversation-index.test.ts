@@ -26,6 +26,15 @@ async function authenticatedFetch(path: string, init: RequestInit = {}): Promise
 }
 
 describe("conversation index Worker boundary", () => {
+  it("serves the Roshi launcher with a new-conversation action", async () => {
+    const response = await authenticatedFetch("/");
+
+    expect(response.status).toBe(200);
+    const page = await response.text();
+    expect(page).toContain("Roshi");
+    expect(page).toContain("+ New conversation");
+  });
+
   it("creates and lists a new conversation through local D1", async () => {
     const create = await authenticatedFetch("/api/conversations", { method: "POST" });
 
