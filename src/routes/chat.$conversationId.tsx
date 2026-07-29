@@ -135,7 +135,9 @@ function ChatInner({
     permissionState,
   } = useAudioAnalyser();
   const [colorBlend, setColorBlend] = useState(0);
+  const [autoSend, setAutoSend] = useState(false);
   const consumedTranscriptRef = useRef("");
+  const inputRef = useRef(input);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -161,20 +163,36 @@ function ChatInner({
   }, [isListening]);
 
   useEffect(() => {
+    inputRef.current = input;
+  }, [input]);
+
+  useEffect(() => {
     if (!transcript) return;
     const previous = consumedTranscriptRef.current;
     const finalText = transcript.startsWith(previous)
       ? transcript.slice(previous.length).trim()
       : transcript;
     consumedTranscriptRef.current = transcript;
-    if (finalText) setInput((current) => (current ? `${current} ${finalText}` : finalText));
-  }, [setInput, transcript]);
+    if (!finalText) return;
+
+    const nextInput = inputRef.current ? `${inputRef.current} ${finalText}` : finalText;
+    if (autoSend && !isStreaming) {
+      sendMessage({ text: nextInput });
+      inputRef.current = "";
+      setInput("");
+      return;
+    }
+
+    inputRef.current = nextInput;
+    setInput(nextInput);
+  }, [autoSend, isStreaming, sendMessage, setInput, transcript]);
 
   function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const text = input.trim();
     if (!text || isStreaming) return;
     sendMessage({ text });
+    inputRef.current = "";
     setInput("");
   }
 
@@ -409,6 +427,26 @@ function ChatInner({
             Send
           </button>
         </div>
+        <label
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "0.4rem",
+            marginTop: "0.75rem",
+            color: "#cbd5e1",
+            fontFamily: "system-ui, sans-serif",
+            fontSize: "0.85rem",
+            cursor: isStreaming ? "not-allowed" : "pointer",
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={autoSend}
+            onChange={(event) => setAutoSend(event.target.checked)}
+            disabled={isStreaming}
+          />
+          Auto send
+        </label>
         {voiceErrorMessage && (
           <p
             style={{ margin: "0.75rem 0 0", color: "#fca5a5", fontFamily: "system-ui, sans-serif" }}
