@@ -37,7 +37,7 @@
     {
       "binding": "DB",
       "database_name": "roshi",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "c1721535-6707-41e3-9200-f7f94e0b375c",
       "migrations_dir": "migrations",
     },
   ],
