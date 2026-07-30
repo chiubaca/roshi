@@ -79,7 +79,7 @@ export default {
         await deleteConversation(env.DB, conversationId);
         const stub = env.ConversationAgent.get(env.ConversationAgent.idFromName(conversationId));
         try {
-          await stub.clearStorage();
+          await stub.destroyConversation();
         } catch (error) {
           await restoreConversation(env.DB, conversation);
           throw error;
