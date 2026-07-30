@@ -117,13 +117,6 @@ describe("conversation index Worker boundary", () => {
       headers: { Upgrade: "websocket" },
     });
     expect(agent.status).toBe(404);
-    await runInDurableObject(stub, async (agent) => {
-      const conversation = agent as import("./conversation-agent").ConversationAgent;
-      expect(conversation.messages).toEqual([]);
-      const state = conversation as unknown as { ctx: DurableObjectState };
-      expect(() => state.ctx.storage.sql.exec("SELECT * FROM cf_ai_chat_agent_messages")).toThrow(
-        /no such table/i,
-      );
-    });
+    await expect(runInDurableObject(stub, async () => undefined)).rejects.toThrow("destroyed");
   });
 });

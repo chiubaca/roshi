@@ -114,9 +114,8 @@ export function createBrowserTools(browserBinding: BrowserRun) {
 }
 
 export class ConversationAgent extends AIChatAgent<Env> {
-  async clearStorage(): Promise<void> {
-    await this.ctx.storage.deleteAll();
-    this.messages = [];
+  async destroyConversation(): Promise<void> {
+    await this.destroy();
   }
 
   async onChatMessage() {
