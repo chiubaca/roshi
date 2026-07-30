@@ -11,7 +11,7 @@ const COOKIE_NAME = "roshi_session";
 const PASSWORD = "test-password";
 const BASE_URL = "http://example.com";
 
-type BrowserTool<Input> = {
+type Tool<Input> = {
   execute(input: Input, options: unknown): Promise<unknown>;
 };
 
@@ -190,7 +190,7 @@ describe("ConversationAgent", () => {
       browser_scrape: expect.any(Object),
     });
     expect(tools).not.toHaveProperty("browser_content");
-    const browserMarkdown = tools.browser_markdown as unknown as BrowserTool<{ url: string }>;
+    const browserMarkdown = tools.browser_markdown as unknown as Tool<{ url: string }>;
     const result = (await browserMarkdown.execute(
       { url: "https://example.com/article" },
       {},
@@ -208,7 +208,7 @@ describe("ConversationAgent", () => {
       new Response("rate limited", { status: 429, headers: { "Retry-After": "20" } }),
     );
     const tools = createBrowserTools(env.BROWSER);
-    const browserMarkdown = tools.browser_markdown as unknown as BrowserTool<{ url: string }>;
+    const browserMarkdown = tools.browser_markdown as unknown as Tool<{ url: string }>;
     const result = (await browserMarkdown.execute(
       { url: "https://example.com/article" },
       {},
@@ -221,7 +221,7 @@ describe("ConversationAgent", () => {
   it("returns Browser Run exceptions to the model", async () => {
     vi.spyOn(env.BROWSER, "quickAction").mockRejectedValue(new Error("navigation timed out"));
     const tools = createBrowserTools(env.BROWSER);
-    const browserMarkdown = tools.browser_markdown as unknown as BrowserTool<{ url: string }>;
+    const browserMarkdown = tools.browser_markdown as unknown as Tool<{ url: string }>;
     const result = (await browserMarkdown.execute(
       { url: "https://example.com/article" },
       {},
@@ -238,7 +238,7 @@ describe("ConversationAgent", () => {
       ),
     );
     const tools = createBrowserTools(env.BROWSER);
-    const browserMarkdown = tools.browser_markdown as unknown as BrowserTool<{ url: string }>;
+    const browserMarkdown = tools.browser_markdown as unknown as Tool<{ url: string }>;
     const result = (await browserMarkdown.execute(
       { url: "https://example.com/article" },
       {},
@@ -253,8 +253,8 @@ describe("ConversationAgent", () => {
       return new Response(JSON.stringify({ success: true, result: [] }));
     });
     const tools = createBrowserTools(env.BROWSER);
-    const browserLinks = tools.browser_links as unknown as BrowserTool<{ url: string }>;
-    const browserExtract = tools.browser_extract as unknown as BrowserTool<{
+    const browserLinks = tools.browser_links as unknown as Tool<{ url: string }>;
+    const browserExtract = tools.browser_extract as unknown as Tool<{
       url: string;
       prompt: string;
     }>;
@@ -289,7 +289,7 @@ describe("ConversationAgent", () => {
       }),
     );
     const tools = createWebSearchTools("test-key", fetch);
-    const webSearch = tools.webSearch as unknown as BrowserTool<{
+    const webSearch = tools.webSearch as unknown as Tool<{
       query: string;
       maxResults: number;
     }>;
@@ -325,7 +325,7 @@ describe("ConversationAgent", () => {
   it("returns Tavily failures as a structured tool result", async () => {
     const fetch = vi.fn().mockResolvedValue(new Response("rate limited", { status: 429 }));
     const tools = createWebSearchTools("test-key", fetch);
-    const webSearch = tools.webSearch as unknown as BrowserTool<{
+    const webSearch = tools.webSearch as unknown as Tool<{
       query: string;
       maxResults: number;
     }>;
@@ -336,15 +336,34 @@ describe("ConversationAgent", () => {
   });
 
   it("passes web search results through the ConversationAgent tool boundary", async () => {
-    const fetch = vi.fn().mockResolvedValue(
-      Response.json({
-        results: [
-          { title: "Release notes", url: "https://example.com/releases", content: "1.2.3" },
-        ],
-      }),
+    const fetch = vi.fn().mockImplementation(() =>
+      Promise.resolve(
+        Response.json({
+          results: [
+            { title: "Release notes", url: "https://example.com/releases", content: "1.2.3" },
+          ],
+        }),
+      ),
     );
     vi.stubGlobal("fetch", fetch);
-    const streamText = stubModel("[Release notes](https://example.com/releases)");
+    const streamText = stubModel();
+    streamText.mockImplementation(
+      (options) =>
+        ({
+          toUIMessageStreamResponse: async () => {
+            const tools = options.tools as ReturnType<typeof createWebSearchTools>;
+            const result = await (
+              tools.webSearch as unknown as Tool<{ query: string; maxResults: number }>
+            ).execute({ query: "latest release", maxResults: 5 }, {});
+            expect(result).toEqual({
+              results: [
+                { title: "Release notes", url: "https://example.com/releases", snippet: "1.2.3" },
+              ],
+            });
+            return new Response("[Release notes](https://example.com/releases)");
+          },
+        }) as never,
+    );
     const conversationId = ulid();
     const stub = env.ConversationAgent.get(env.ConversationAgent.idFromName(conversationId));
 
@@ -357,12 +376,39 @@ describe("ConversationAgent", () => {
       expect(await response.text()).toContain("[Release notes](https://example.com/releases)");
     });
 
-    const tools = streamText.mock.calls[0][0].tools as ReturnType<typeof createWebSearchTools>;
-    const result = await (
-      tools.webSearch as unknown as BrowserTool<{ query: string; maxResults: number }>
-    ).execute({ query: "latest release", maxResults: 5 }, {});
-    expect(result).toEqual({
-      results: [{ title: "Release notes", url: "https://example.com/releases", snippet: "1.2.3" }],
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the ConversationAgent stream alive after a web search failure", async () => {
+    const fetch = vi
+      .fn()
+      .mockImplementation(() => Promise.resolve(new Response("rate limited", { status: 429 })));
+    vi.stubGlobal("fetch", fetch);
+    const streamText = stubModel();
+    streamText.mockImplementation(
+      (options) =>
+        ({
+          toUIMessageStreamResponse: async () => {
+            const tools = options.tools as ReturnType<typeof createWebSearchTools>;
+            const result = await (
+              tools.webSearch as unknown as Tool<{ query: string; maxResults: number }>
+            ).execute({ query: "latest release", maxResults: 5 }, {});
+            expect(result).toEqual({ error: "Web search is temporarily unavailable (HTTP 429)." });
+            return new Response("I couldn't search the web just now. Please try again shortly.");
+          },
+        }) as never,
+    );
+    const stub = env.ConversationAgent.get(env.ConversationAgent.idFromName(ulid()));
+
+    await runInDurableObject(stub, async (agent) => {
+      const conversation = agent as import("./conversation-agent").ConversationAgent;
+      conversation.messages = [
+        { id: "message-1", role: "user", parts: [{ type: "text", text: "Latest release?" }] },
+      ];
+      const response = await conversation.onChatMessage();
+      expect(await response.text()).toContain("couldn't search the web");
     });
+
+    expect(fetch).toHaveBeenCalledOnce();
   });
 });
