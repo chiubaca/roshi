@@ -33,7 +33,7 @@ describe("conversation index Worker boundary", () => {
     expect(response.status).toBe(200);
     const page = await response.text();
     expect(page).toContain("Roshi");
-    expect(page).toContain("+ New conversation");
+    expect(page).toContain("New conversation");
   });
 
   it("creates and lists a new conversation through local D1", async () => {

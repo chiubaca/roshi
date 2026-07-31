@@ -1,24 +1,26 @@
-import { useAgent } from "agents/react";
 import { useAgentChat } from "@cloudflare/ai-chat/react";
 import { useVoiceInput } from "@cloudflare/voice/react";
 import { MeshGradient, PulsingBorder } from "@paper-design/shaders-react";
-import { createFileRoute } from "@tanstack/react-router";
+import { Link, createFileRoute } from "@tanstack/react-router";
+import { useAgent } from "agents/react";
 import { interpolateLab } from "d3-interpolate";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
-  useRef,
   useEffect,
-  useMemo,
+  useRef,
   useState,
   type Dispatch,
   type FormEvent,
+  type KeyboardEvent,
   type SetStateAction,
 } from "react";
 import { useAudioAnalyser } from "~/useAudioAnalyser";
 
-const DEFAULT_MESH_COLORS = ["#a2d2ff", "#bde0fe", "#8ecae6", "#caf0f8"];
-const LISTENING_COLORS = ["#ffe8d6", "#ffd7ba", "#fec89a", "#f9c74f"];
-const PULSE_COLORS_DEFAULT = ["#5aa9e6", "#4a9ad9", "#6ab7ff", "#3d8bc6"];
-const PULSE_COLORS_LISTENING = ["#f7b267", "#f5a142", "#f4a261", "#e38b2a"];
+const DEFAULT_MESH_COLORS = ["#09181d", "#16333a", "#416765", "#9eb9ae"];
+const LISTENING_COLORS = ["#1a100a", "#59341f", "#b76838", "#f2bc76"];
+const PULSE_COLORS_DEFAULT = ["#8fcfbd", "#62a998", "#b4e6d8", "#4f8f81"];
+const PULSE_COLORS_LISTENING = ["#f8c27d", "#ed9652", "#ffd49d", "#d87337"];
 
 type SearchResult = { title: string; url: string; snippet: string };
 
@@ -38,33 +40,24 @@ function searchResults(output: unknown): SearchResult[] {
 export function SearchToolChip({ output }: { output: unknown }) {
   const results = searchResults(output);
   return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: "0.35rem",
-        margin: "0.1rem 0.35rem 0.1rem 0",
-        padding: "0.2rem 0.5rem",
-        borderRadius: "999px",
-        background: "rgba(59, 130, 246, 0.18)",
-        color: "#93c5fd",
-        fontFamily: "ui-monospace, SFMono-Regular, monospace",
-        fontSize: "0.75rem",
-      }}
-    >
-      Web search
-      {results.map((result) => (
-        <a
-          key={result.url}
-          href={result.url}
-          target="_blank"
-          rel="noreferrer"
-          style={{ color: "inherit" }}
-        >
-          {result.title}
-        </a>
-      ))}
-    </span>
+    <details className="tool-card">
+      <summary>
+        Web search
+        <span className="tool-count">{results.length} sources</span>
+      </summary>
+      {results.length > 0 && (
+        <ul className="source-list">
+          {results.map((result) => (
+            <li key={result.url}>
+              <a className="source-link" href={result.url} target="_blank" rel="noreferrer">
+                <span className="source-title">{result.title}</span>
+                <span className="source-snippet">{result.snippet}</span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+    </details>
   );
 }
 
@@ -73,7 +66,7 @@ export function CitationText({ text }: { text: string }) {
   return parts.map((part, index) => {
     const match = /^\[([^\]]+)\]\((https?:\/\/[^)]+)\)$/.exec(part);
     return match ? (
-      <a key={index} href={match[2]} target="_blank" rel="noreferrer" style={{ color: "#93c5fd" }}>
+      <a className="citation-link" key={index} href={match[2]} target="_blank" rel="noreferrer">
         {match[1]}
       </a>
     ) : (
@@ -82,8 +75,8 @@ export function CitationText({ text }: { text: string }) {
   });
 }
 
-function blendPalettes(from: string[], to: string[], t: number): string[] {
-  return from.map((color, i) => interpolateLab(color, to[i % to.length])(t));
+function blendPalettes(from: string[], to: string[], amount: number): string[] {
+  return from.map((color, index) => interpolateLab(color, to[index % to.length])(amount));
 }
 
 export const Route = createFileRoute("/chat/$conversationId")({
@@ -92,61 +85,24 @@ export const Route = createFileRoute("/chat/$conversationId")({
 
 function ChatPage() {
   const { conversationId } = Route.useParams();
-
-  return (
-    <div
-      style={{
-        height: "100vh",
-        color: "#e2e8f0",
-        fontFamily: '"Georgia", "Times New Roman", serif',
-        display: "flex",
-        flexDirection: "column",
-        position: "relative",
-        overflow: "hidden",
-      }}
-    >
-      <div
-        style={{ position: "fixed", inset: 0, zIndex: -1, background: "rgba(15, 23, 42, 0.58)" }}
-      />
-      <div
-        style={{
-          maxWidth: 640,
-          width: "100%",
-          margin: "0 auto",
-          padding: "2rem 1rem",
-          display: "flex",
-          flexDirection: "column",
-          height: "100vh",
-          boxSizing: "border-box",
-        }}
-      >
-        <ChatPanel conversationId={conversationId} />
-      </div>
-    </div>
-  );
+  return <ChatPanel key={conversationId} conversationId={conversationId} />;
 }
 
 function ChatPanel({ conversationId }: { conversationId: string }) {
   const [mounted, setMounted] = useState(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
   const [input, setInput] = useState("");
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  useEffect(() => setMounted(true), []);
 
   if (!mounted) {
     return (
-      <p
-        style={{
-          textAlign: "center",
-          color: "#64748b",
-          fontStyle: "italic",
-          marginTop: "4rem",
-        }}
-      >
-        Loading…
-      </p>
+      <main className="chat-page">
+        <div className="ambient-backdrop" aria-hidden="true" />
+        <div className="loading-conversation" role="status">
+          <span className="spinner" aria-hidden="true" /> Loading conversation
+        </div>
+      </main>
     );
   }
 
@@ -171,14 +127,8 @@ function ChatInner({
   input: string;
   setInput: Dispatch<SetStateAction<string>>;
 }) {
-  const agent = useAgent({
-    agent: "ConversationAgent",
-    name: conversationId,
-  });
-
-  const { messages, sendMessage, isStreaming } = useAgentChat({
-    agent,
-  });
+  const agent = useAgent({ agent: "ConversationAgent", name: conversationId });
+  const { messages, sendMessage, isStreaming } = useAgentChat({ agent });
   const {
     transcript,
     interimTranscript,
@@ -186,47 +136,68 @@ function ChatInner({
     error: voiceError,
     start: voiceStart,
     stop: voiceStop,
-  } = useVoiceInput({
-    agent: "VoiceAgent",
-    name: conversationId,
-  });
+  } = useVoiceInput({ agent: "VoiceAgent", name: conversationId });
   const {
     start: startAnalyser,
     stop: stopAnalyser,
     analysis,
     permissionState,
   } = useAudioAnalyser();
+
+  const reducedMotion = useReducedMotion();
   const [colorBlend, setColorBlend] = useState(0);
   const [autoSend, setAutoSend] = useState(false);
+  const [isPinned, setIsPinned] = useState(true);
+  const [voiceStarting, setVoiceStarting] = useState(false);
+  const [submissionError, setSubmissionError] = useState<string | null>(null);
   const consumedTranscriptRef = useRef("");
   const inputRef = useRef(input);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const pinnedRef = useRef(true);
+  const colorBlendRef = useRef(0);
 
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    colorBlendRef.current = colorBlend;
+  }, [colorBlend]);
+
+  useEffect(() => {
+    const element = scrollRef.current;
+    if (element && pinnedRef.current) element.scrollTop = element.scrollHeight;
+  }, [messages, isStreaming, scrollRef]);
+
+  useEffect(() => {
+    if (reducedMotion) {
+      setColorBlend(isListening ? 1 : 0);
+      return;
     }
-  }, [messages]);
 
-  useEffect(() => {
-    let rafId: number;
+    let animationFrame = 0;
     let startTime: number | null = null;
-    const startBlend = colorBlend;
+    const startBlend = colorBlendRef.current;
     const targetBlend = isListening ? 1 : 0;
-
+    const duration = isListening ? 440 : 680;
     const animate = (timestamp: number) => {
       if (startTime === null) startTime = timestamp;
-      const progress = Math.min((timestamp - startTime) / 800, 1);
-      setColorBlend(startBlend + (targetBlend - startBlend) * (1 - Math.pow(1 - progress, 3)));
-      if (progress < 1) rafId = requestAnimationFrame(animate);
+      const progress = Math.min((timestamp - startTime) / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setColorBlend(startBlend + (targetBlend - startBlend) * eased);
+      if (progress < 1) animationFrame = requestAnimationFrame(animate);
     };
-
-    rafId = requestAnimationFrame(animate);
-    return () => cancelAnimationFrame(rafId);
-  }, [isListening]);
+    animationFrame = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(animationFrame);
+  }, [isListening, reducedMotion]);
 
   useEffect(() => {
     inputRef.current = input;
   }, [input]);
+
+  useEffect(() => {
+    resizeTextarea();
+    if (pinnedRef.current) {
+      const element = scrollRef.current;
+      if (element) element.scrollTop = element.scrollHeight;
+    }
+  }, [input, scrollRef]);
 
   useEffect(() => {
     if (!transcript) return;
@@ -239,28 +210,75 @@ function ChatInner({
 
     const nextInput = inputRef.current ? `${inputRef.current} ${finalText}` : finalText;
     if (autoSend && !isStreaming) {
-      sendMessage({ text: nextInput });
+      setSubmissionError(null);
+      void sendMessage({ text: nextInput }).catch(() => {
+        setSubmissionError("Voice message wasn’t sent. Your words are back in the composer.");
+        inputRef.current = nextInput;
+        setInput(nextInput);
+      });
       inputRef.current = "";
       setInput("");
+      pinnedRef.current = true;
+      setIsPinned(true);
       return;
     }
-
     inputRef.current = nextInput;
     setInput(nextInput);
   }, [autoSend, isStreaming, sendMessage, setInput, transcript]);
 
-  function handleSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
+  function resizeTextarea() {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = "auto";
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 144)}px`;
+  }
+
+  function submitMessage() {
     const text = input.trim();
     if (!text || isStreaming) return;
-    sendMessage({ text });
+    setSubmissionError(null);
+    void sendMessage({ text }).catch(() => {
+      setSubmissionError("Message wasn’t sent. Check your connection and try again.");
+      if (!inputRef.current) {
+        inputRef.current = text;
+        setInput(text);
+      }
+    });
     inputRef.current = "";
     setInput("");
+    pinnedRef.current = true;
+    setIsPinned(true);
+    requestAnimationFrame(() => {
+      resizeTextarea();
+      const element = scrollRef.current;
+      if (element) element.scrollTop = element.scrollHeight;
+    });
+  }
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    submitMessage();
+  }
+
+  function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+      event.preventDefault();
+      submitMessage();
+    }
   }
 
   async function handleVoiceStart() {
-    await startAnalyser();
-    await voiceStart();
+    if (voiceStarting) return;
+    setVoiceStarting(true);
+    try {
+      await voiceStart();
+      await startAnalyser();
+    } catch {
+      voiceStop();
+      stopAnalyser();
+    } finally {
+      setVoiceStarting(false);
+    }
   }
 
   function handleVoiceStop() {
@@ -268,295 +286,417 @@ function ChatInner({
     stopAnalyser();
   }
 
-  const shaderProps = useMemo(() => {
-    const base = {
-      colors: blendPalettes(DEFAULT_MESH_COLORS, LISTENING_COLORS, colorBlend),
-      distortion: 0.3,
-      speed: 0.6,
-    };
+  function handleScroll() {
+    const element = scrollRef.current;
+    if (!element) return;
+    const pinned = element.scrollHeight - element.scrollTop - element.clientHeight < 96;
+    pinnedRef.current = pinned;
+    setIsPinned(pinned);
+  }
 
-    if (!isListening) return base;
-    return {
-      ...base,
-      distortion: Math.min(base.distortion + analysis.overall * 0.9 + analysis.bass * 0.3, 1),
-      speed: Math.min(base.speed + analysis.overall * 0.4 + analysis.mid * 0.2, 1.5),
-    };
-  }, [analysis, colorBlend, isListening]);
+  function jumpToLatest() {
+    const element = scrollRef.current;
+    if (!element) return;
+    element.scrollTo({ top: element.scrollHeight, behavior: reducedMotion ? "auto" : "smooth" });
+    pinnedRef.current = true;
+    setIsPinned(true);
+  }
 
+  function choosePrompt(prompt: string) {
+    setInput(prompt);
+    inputRef.current = prompt;
+    requestAnimationFrame(() => {
+      resizeTextarea();
+      textareaRef.current?.focus();
+    });
+  }
+
+  const shaderColors = blendPalettes(DEFAULT_MESH_COLORS, LISTENING_COLORS, colorBlend);
+  const shaderDistortion = isListening
+    ? Math.min(0.28 + analysis.overall * 0.62 + analysis.bass * 0.2, 0.7)
+    : 0.24;
+  const shaderSpeed = reducedMotion
+    ? 0
+    : isListening
+      ? Math.min(0.24 + analysis.overall * 0.3, 0.52)
+      : 0.14;
   const voiceErrorMessage =
-    voiceError ||
+    (voiceError ? "Voice is reconnecting. Text chat is still available." : null) ||
     (permissionState === "denied"
-      ? "Microphone access denied. Please allow permission and try again."
+      ? "Microphone access is blocked. Allow access in your browser settings, then try again."
       : null);
+  const voiceStatus = voiceStarting
+    ? "Requesting microphone access…"
+    : isListening
+      ? interimTranscript
+        ? `Listening: ${interimTranscript}`
+        : "Listening… speak naturally"
+      : isStreaming
+        ? "Roshi is composing a response"
+        : "Enter to send · Shift Enter for a new line";
 
   return (
-    <>
-      <div style={{ position: "fixed", inset: 0, zIndex: -2 }}>
+    <main className="chat-page">
+      <div className="ambient-backdrop" aria-hidden="true">
         <MeshGradient
           width="100vw"
           height="100vh"
-          colors={shaderProps.colors}
-          distortion={shaderProps.distortion}
-          swirl={0.9}
-          grainMixer={0.2}
-          grainOverlay={0.2}
-          speed={shaderProps.speed}
-          scale={1}
+          colors={shaderColors}
+          distortion={shaderDistortion}
+          swirl={0.72}
+          grainMixer={0.12}
+          grainOverlay={0.15}
+          speed={shaderSpeed}
+          scale={1.08}
           rotation={0}
         />
       </div>
-      <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", paddingBottom: "1rem" }}>
-        {messages.length === 0 && (
-          <p
-            style={{
-              textAlign: "center",
-              color: "#64748b",
-              fontStyle: "italic",
-              marginTop: "4rem",
-            }}
-          >
-            Start a conversation with Roshi…
-          </p>
-        )}
-        {messages.map((msg) => (
-          <div key={msg.id} style={{ marginBottom: "1.25rem" }}>
-            <span
-              style={{
-                display: "block",
-                fontFamily: "system-ui, sans-serif",
-                fontSize: "0.7rem",
-                textTransform: "uppercase",
-                letterSpacing: "0.08em",
-                fontVariant: "small-caps",
-                color: msg.role === "user" ? "#93c5fd" : "#86efac",
-                marginBottom: "0.25rem",
-              }}
-            >
-              {msg.role === "user" ? "You" : "Roshi"}
-            </span>
-            <div
-              style={{
-                lineHeight: 1.6,
-                whiteSpace: "pre-wrap",
-              }}
-            >
-              {msg.parts?.map((part, i) => {
-                if (part.type === "text") return <CitationText key={i} text={part.text} />;
-                if (part.type === "tool-webSearch")
-                  return <SearchToolChip key={i} output={part.output} />;
-                if (part.type.startsWith("tool-browser_")) {
-                  return (
-                    <span
-                      key={i}
-                      style={{
-                        display: "inline-flex",
-                        margin: "0.1rem 0.35rem 0.1rem 0",
-                        padding: "0.2rem 0.5rem",
-                        borderRadius: "999px",
-                        background: "rgba(59, 130, 246, 0.18)",
-                        color: "#93c5fd",
-                        fontFamily: "system-ui, sans-serif",
-                        fontSize: "0.75rem",
-                      }}
-                    >
-                      {part.type.replace("tool-browser_", "Browser: ").replaceAll("_", " ")}
-                    </span>
-                  );
-                }
-                return null;
-              })}
-            </div>
-          </div>
-        ))}
-        {isStreaming && messages[messages.length - 1]?.role !== "assistant" && (
-          <div style={{ marginBottom: "1.25rem" }}>
-            <span
-              style={{
-                display: "block",
-                fontFamily: "system-ui, sans-serif",
-                fontSize: "0.7rem",
-                textTransform: "uppercase",
-                letterSpacing: "0.08em",
-                fontVariant: "small-caps",
-                color: "#86efac",
-                marginBottom: "0.25rem",
-              }}
-            >
-              Roshi
-            </span>
-            <span style={{ color: "#64748b" }}>…</span>
-          </div>
-        )}
-      </div>
 
-      <form
-        onSubmit={handleSubmit}
-        style={{
-          position: "sticky",
-          bottom: 0,
-          padding: "1rem",
-          margin: "0 -1rem",
-          background: "rgba(15, 23, 42, 0.85)",
-          backdropFilter: "blur(12px)",
-          borderTop: "1px solid rgba(255,255,255,0.08)",
-          borderRadius: "0.75rem 0.75rem 0 0",
-        }}
-      >
-        <div style={{ display: "flex", gap: "0.5rem" }}>
-          <input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder={interimTranscript || "Type a message…"}
-            disabled={isStreaming}
-            style={{
-              flex: 1,
-              padding: "0.75rem 1rem",
-              borderRadius: "0.5rem",
-              border: "1px solid rgba(255,255,255,0.15)",
-              background: "rgba(255,255,255,0.05)",
-              color: "#e2e8f0",
-              fontSize: "1rem",
-              fontFamily: "inherit",
-              outline: "none",
-            }}
-          />
-          <div style={{ position: "relative", width: "3rem", height: "3rem", flex: "0 0 3rem" }}>
-            <div
-              style={{
-                position: "absolute",
-                inset: "-0.25rem",
-                zIndex: 0,
-                overflow: "hidden",
-                borderRadius: "50%",
-              }}
-            >
-              <PulsingBorder
-                width={56}
-                height={56}
-                colors={isListening ? PULSE_COLORS_LISTENING : PULSE_COLORS_DEFAULT}
-                colorBack="#00000000"
-                roundness={0.5}
-                thickness={0.15}
-                softness={0.6}
-                intensity={isListening ? 0.6 : 0.3}
-                bloom={isListening ? 0.5 : 0.3}
-                spots={3}
-                spotSize={0.4}
-                pulse={isListening ? 0.8 : 0.4}
-                smoke={0.2}
-                smokeSize={0.5}
-                speed={isListening ? 1.5 : 0.8}
-                scale={0.8}
+      <header className="chat-header">
+        <Link className="chat-back" to="/" aria-label="Back to conversations">
+          <ArrowLeftIcon /> <span>Conversations</span>
+        </Link>
+        <span className="chat-brand">Roshi</span>
+        {isListening || isStreaming ? (
+          <span
+            className={`chat-status${isListening ? " listening" : ""}`}
+            role="status"
+            aria-label={isListening ? "Listening" : "Roshi is thinking"}
+          >
+            <i className="chat-status-dot" aria-hidden="true" />
+            <span>{isListening ? "Listening" : "Thinking"}</span>
+          </span>
+        ) : (
+          <span aria-hidden="true" />
+        )}
+      </header>
+
+      <section className="chat-main" aria-label="Conversation">
+        <div
+          className="message-log"
+          ref={scrollRef}
+          role="log"
+          aria-label="Conversation messages"
+          aria-busy={isStreaming}
+          onScroll={handleScroll}
+          tabIndex={0}
+        >
+          {messages.length === 0 ? (
+            <EmptyConversation onChoosePrompt={choosePrompt} />
+          ) : (
+            <ol className="message-list">
+              {messages.map((message) => (
+                <li className={`message-item ${message.role}`} key={message.id}>
+                  <article
+                    className="message-article"
+                    aria-label={message.role === "user" ? "You" : "Roshi"}
+                  >
+                    {message.role !== "user" && <div className="message-role">Roshi</div>}
+                    <div className="message-body">
+                      {message.parts?.map((part, index) => {
+                        if (part.type === "text")
+                          return <MessageMarkdown key={index} text={part.text} />;
+                        if (part.type === "tool-webSearch") {
+                          return <SearchToolChip key={index} output={part.output} />;
+                        }
+                        if (part.type.startsWith("tool-browser_")) {
+                          const isActiveMessage = message.id === messages[messages.length - 1]?.id;
+                          return isStreaming && isActiveMessage ? (
+                            <span className="browser-tool" key={index}>
+                              {formatBrowserTool(part.type)}
+                            </span>
+                          ) : null;
+                        }
+                        return null;
+                      })}
+                    </div>
+                  </article>
+                </li>
+              ))}
+              {isStreaming && messages[messages.length - 1]?.role !== "assistant" && (
+                <li className="message-item assistant">
+                  <article className="message-article" aria-label="Roshi is thinking">
+                    <div className="message-role">Roshi</div>
+                    <ThinkingIndicator />
+                  </article>
+                </li>
+              )}
+            </ol>
+          )}
+        </div>
+
+        {!isPinned && (
+          <button className="jump-latest" type="button" onClick={jumpToLatest}>
+            Latest response ↓
+          </button>
+        )}
+      </section>
+
+      <div className="composer-wrap">
+        <form className="composer" onSubmit={handleSubmit}>
+          <label className="sr-only" htmlFor="message-roshi">
+            Message Roshi
+          </label>
+          <div className="composer-row">
+            <div className="composer-field">
+              <textarea
+                ref={textareaRef}
+                id="message-roshi"
+                rows={1}
+                enterKeyHint="send"
+                value={input}
+                onChange={(event) => {
+                  setInput(event.target.value);
+                  requestAnimationFrame(resizeTextarea);
+                }}
+                onKeyDown={handleComposerKeyDown}
+                placeholder="Message Roshi"
+                aria-describedby="composer-status"
               />
             </div>
+
+            <div className="voice-button-wrap">
+              {(isListening || voiceStarting) && (
+                <div className="voice-pulse" aria-hidden="true">
+                  <PulsingBorder
+                    width={56}
+                    height={56}
+                    colors={isListening ? PULSE_COLORS_LISTENING : PULSE_COLORS_DEFAULT}
+                    colorBack="#00000000"
+                    roundness={0.5}
+                    thickness={0.12}
+                    softness={0.64}
+                    intensity={isListening ? 0.62 : 0.25}
+                    bloom={isListening ? 0.42 : 0.18}
+                    spots={3}
+                    spotSize={0.38}
+                    pulse={reducedMotion ? 0 : isListening ? 0.65 : 0.2}
+                    smoke={0.16}
+                    smokeSize={0.45}
+                    speed={reducedMotion ? 0 : isListening ? 1.25 : 0.45}
+                    scale={0.8}
+                  />
+                </div>
+              )}
+              <button
+                className={`voice-button${isListening ? " listening" : ""}`}
+                type="button"
+                aria-label={isListening ? "Stop listening" : "Start voice input"}
+                title={isListening ? "Stop listening" : "Voice input"}
+                onClick={isListening ? handleVoiceStop : () => void handleVoiceStart()}
+                disabled={voiceStarting || (isStreaming && !isListening)}
+              >
+                {voiceStarting ? (
+                  <span className="spinner" />
+                ) : isListening ? (
+                  <StopIcon />
+                ) : (
+                  <MicIcon />
+                )}
+              </button>
+            </div>
+
             <button
-              type="button"
-              aria-label={isListening ? "Stop listening" : "Start listening"}
-              onClick={isListening ? handleVoiceStop : handleVoiceStart}
-              disabled={isStreaming && !isListening}
-              style={{
-                position: "relative",
-                zIndex: 1,
-                width: "3rem",
-                height: "3rem",
-                borderRadius: "50%",
-                border: "1px solid rgba(255, 255, 255, 0.25)",
-                background: "rgba(0, 0, 0, 0.42)",
-                backdropFilter: "blur(8px)",
-                color: "#fff",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                cursor: isStreaming && !isListening ? "not-allowed" : "pointer",
-              }}
+              className="send-button"
+              type="submit"
+              aria-label="Send message"
+              title="Send message"
+              disabled={isStreaming || !input.trim()}
             >
-              {isListening ? <StopIcon /> : <MicIcon />}
+              <SendIcon />
             </button>
           </div>
+
+          <div className="composer-meta">
+            <p
+              className={`voice-status${voiceErrorMessage || submissionError ? " error" : ""}`}
+              id="composer-status"
+              role={voiceErrorMessage || submissionError ? "alert" : "status"}
+            >
+              {submissionError || voiceErrorMessage || voiceStatus}
+            </p>
+            <label className="auto-send" title="Send finalized speech without review">
+              <input
+                type="checkbox"
+                checked={autoSend}
+                onChange={(event) => setAutoSend(event.target.checked)}
+                disabled={isStreaming}
+              />
+              <span className="switch-track" aria-hidden="true">
+                <span className="switch-thumb" />
+              </span>
+              Send after speech
+            </label>
+          </div>
+        </form>
+      </div>
+      <div className="sr-only" aria-live="polite" aria-atomic="true">
+        {isStreaming ? "Roshi is responding" : ""}
+      </div>
+    </main>
+  );
+}
+
+function EmptyConversation({ onChoosePrompt }: { onChoosePrompt: (prompt: string) => void }) {
+  const prompts = [
+    "Research a current topic",
+    "Help me think through a decision",
+    "Summarize and explain an idea",
+  ];
+  return (
+    <div className="empty-conversation">
+      <div className="empty-orbit" aria-hidden="true">
+        <SparkIcon />
+      </div>
+      <h1>What are we working through?</h1>
+      <p>
+        Ask in text or speak. Roshi can search and read the web when current information matters.
+      </p>
+      <div className="prompt-list" aria-label="Prompt suggestions">
+        {prompts.map((prompt) => (
           <button
-            type="submit"
-            disabled={isStreaming || !input.trim()}
-            style={{
-              padding: "0.75rem 1.25rem",
-              borderRadius: "0.5rem",
-              border: "none",
-              background: isStreaming || !input.trim() ? "#334155" : "#3b82f6",
-              color: "#e2e8f0",
-              fontSize: "0.9rem",
-              fontWeight: 600,
-              cursor: isStreaming || !input.trim() ? "not-allowed" : "pointer",
-              fontFamily: "system-ui, sans-serif",
-            }}
+            className="prompt-button"
+            type="button"
+            key={prompt}
+            onClick={() => onChoosePrompt(prompt)}
           >
-            Send
+            {prompt}
           </button>
-        </div>
-        <label
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "0.4rem",
-            marginTop: "0.75rem",
-            color: "#cbd5e1",
-            fontFamily: "system-ui, sans-serif",
-            fontSize: "0.85rem",
-            cursor: isStreaming ? "not-allowed" : "pointer",
-          }}
-        >
-          <input
-            type="checkbox"
-            checked={autoSend}
-            onChange={(event) => setAutoSend(event.target.checked)}
-            disabled={isStreaming}
-          />
-          Auto send
-        </label>
-        {voiceErrorMessage && (
-          <p
-            style={{ margin: "0.75rem 0 0", color: "#fca5a5", fontFamily: "system-ui, sans-serif" }}
-          >
-            {voiceErrorMessage}
-          </p>
-        )}
-      </form>
-    </>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ThinkingIndicator() {
+  return (
+    <div className="thinking" role="status" aria-label="Roshi is thinking">
+      <span />
+      <span />
+      <span />
+    </div>
+  );
+}
+
+function MessageMarkdown({ text }: { text: string }) {
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        a: ({ node: _node, ...props }) => (
+          <a className="citation-link" target="_blank" rel="noreferrer" {...props} />
+        ),
+      }}
+    >
+      {text}
+    </ReactMarkdown>
+  );
+}
+
+function formatBrowserTool(type: string): string {
+  const labels: Record<string, string> = {
+    "tool-browser_markdown": "Read a web page",
+    "tool-browser_links": "Reviewed page links",
+    "tool-browser_extract": "Extracted page details",
+    "tool-browser_scrape": "Inspected a web page",
+  };
+  return labels[type] ?? "Reviewed a web page";
+}
+
+function useReducedMotion() {
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const update = () => setReduced(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+  return reduced;
+}
+
+function SvgIcon({ children, size = 18 }: { children: React.ReactNode; size?: number }) {
+  return (
+    <svg
+      className="icon"
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+    >
+      {children}
+    </svg>
+  );
+}
+
+function ArrowLeftIcon() {
+  return (
+    <SvgIcon>
+      <path
+        d="m14.5 6-6 6 6 6"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </SvgIcon>
   );
 }
 
 function MicIcon() {
   return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width={20}
-      height={20}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
-      <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-      <line x1="12" x2="12" y1="19" y2="22" />
-    </svg>
+    <SvgIcon size={19}>
+      <path
+        d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z"
+        stroke="currentColor"
+        strokeWidth="1.7"
+      />
+      <path
+        d="M18.5 10.5V12a6.5 6.5 0 0 1-13 0v-1.5M12 18.5V22m-3 0h6"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+      />
+    </SvgIcon>
   );
 }
 
 function StopIcon() {
   return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width={20}
-      height={20}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <rect x="6" y="6" width="12" height="12" rx="2" />
-    </svg>
+    <SvgIcon size={18}>
+      <rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor" />
+    </SvgIcon>
+  );
+}
+
+function SendIcon() {
+  return (
+    <SvgIcon size={19}>
+      <path
+        d="M12 19V5m0 0-5 5m5-5 5 5"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </SvgIcon>
+  );
+}
+
+function SparkIcon() {
+  return (
+    <SvgIcon size={22}>
+      <path
+        d="M12 3c.7 5 2 6.3 7 7-5 .7-6.3 2-7 7-.7-5-2-6.3-7-7 5-.7 6.3-2 7-7Z"
+        stroke="currentColor"
+        strokeWidth="1.45"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M18.5 16.5c.25 1.75.75 2.25 2.5 2.5-1.75.25-2.25.75-2.5 2.5-.25-1.75-.75-2.25-2.5-2.5 1.75-.25 2.25-.75 2.5-2.5Z"
+        fill="currentColor"
+      />
+    </SvgIcon>
   );
 }
