@@ -3,13 +3,12 @@ import { createQuickActionTools } from "agents/browser/ai";
 import { createWorkersAI } from "workers-ai-provider";
 import { streamText, convertToModelMessages, stepCountIs, tool } from "ai";
 import { z } from "zod";
+import type { SearchResponse } from "./conversation";
 import { recordConversationActivity } from "./conversation-index";
 
 const TAVILY_SEARCH_URL = "https://api.tavily.com/search";
 const MAX_SEARCH_RESULTS = 5;
 
-type SearchResult = { title: string; url: string; snippet: string };
-type SearchResponse = { results: SearchResult[] };
 type SearchFetch = (input: string, init?: RequestInit) => Promise<Response>;
 
 export async function searchWeb(

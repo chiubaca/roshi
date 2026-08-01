@@ -1,6 +1,7 @@
 import { MeshGradient } from "@paper-design/shaders-react";
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useReducedMotion } from "~/useReducedMotion";
 
 type Conversation = {
   id: string;
@@ -178,6 +179,11 @@ function Launcher() {
             Roshi
           </h1>
           <p className="launcher-kicker">A quiet place to think</p>
+          <form action="/logout" className="logout-form" method="post">
+            <button className="logout-button" type="submit">
+              Log out
+            </button>
+          </form>
         </header>
 
         <section className="launcher-panel" aria-labelledby="conversations-title">
@@ -546,16 +552,4 @@ function CloudIcon() {
       <path d="m9.5 11 5 5m0-5-5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
     </Icon>
   );
-}
-
-function useReducedMotion() {
-  const [reduced, setReduced] = useState(false);
-  useEffect(() => {
-    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const update = () => setReduced(media.matches);
-    update();
-    media.addEventListener("change", update);
-    return () => media.removeEventListener("change", update);
-  }, []);
-  return reduced;
 }

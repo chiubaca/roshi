@@ -61,6 +61,16 @@ describe("conversation index Worker boundary", () => {
     ]);
   });
 
+  it("applies the conversations migration with its activity index", async () => {
+    const indexes = await env.DB.prepare("PRAGMA index_list('conversations')").all<{
+      name: string;
+    }>();
+
+    expect(indexes.results).toContainEqual(
+      expect.objectContaining({ name: "conversations_updated_at" }),
+    );
+  });
+
   it("renames a conversation through the Worker and persists the new name", async () => {
     const create = await authenticatedFetch("/api/conversations", { method: "POST" });
     const conversation = (await create.json()) as { id: string; name: string };

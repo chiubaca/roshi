@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
-import { CitationText, SearchToolChip } from "./routes/chat.$conversationId";
+import { MessageMarkdown, SearchToolChip } from "./routes/chat.$conversationId";
 
 describe("Conversation dialogue", () => {
   it("renders search sources as links", () => {
@@ -25,7 +25,7 @@ describe("Conversation dialogue", () => {
 
   it("renders inline Markdown citations as links", () => {
     const markup = renderToStaticMarkup(
-      <CitationText text="The current release is 1.2.3. [Release notes](https://example.com/releases)" />,
+      <MessageMarkdown text="The current release is 1.2.3. [Release notes](https://example.com/releases)" />,
     );
 
     expect(markup).toContain('href="https://example.com/releases"');

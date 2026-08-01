@@ -163,9 +163,15 @@ describe("ConversationAgent", () => {
     );
   });
 
-  it.skip("routes two different conversation IDs to separate DO instances (requires live runtime)", async () => {
-    const id1 = ulid();
-    const id2 = "01K0VNFKJQZ1RWNJBXH7K4T3V8";
+  it("routes two different conversation IDs to separate DO instances", async () => {
+    const first = await authenticatedFetch("/api/conversations", { method: "POST" });
+    const second = await authenticatedFetch("/api/conversations", { method: "POST" });
+    const { id: id1 } = (await first.json()) as { id: string };
+    const { id: id2 } = (await second.json()) as { id: string };
+    expect(id1).not.toBe(id2);
+    expect(env.ConversationAgent.idFromName(id1).toString()).not.toBe(
+      env.ConversationAgent.idFromName(id2).toString(),
+    );
 
     const ws1 = await authenticatedFetch(`/agents/conversation-agent/${id1}`, {
       headers: { Upgrade: "websocket" },

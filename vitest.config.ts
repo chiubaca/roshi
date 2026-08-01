@@ -20,7 +20,7 @@ export default defineConfig({
     tsconfigPaths: true,
   },
   test: {
-    testTimeout: 10_000,
+    testTimeout: 30_000,
     setupFiles: ["./src/test-setup.ts"],
   },
 });

@@ -34,7 +34,7 @@ Four additive changes to `wrangler.jsonc` — a **Browser Run binding**, a **D1 
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "roshi-conversations",
+      "database_name": "roshi",
       "database_id": "<paste from `wrangler d1 create` output>",
       "migrations_dir": "./migrations",
     },
@@ -82,7 +82,7 @@ The conversation index (the `/` list view) lives in D1; messages stay in each co
 
 ```bash
 # one-time
-wrangler d1 create roshi-conversations
+wrangler d1 create roshi
 # → paste the returned database_id into wrangler.jsonc
 ```
 
@@ -102,7 +102,7 @@ CREATE INDEX IF NOT EXISTS idx_conversations_updated_at
   ON conversations(updated_at DESC); -- the `/` list sorts by recent activity
 ```
 
-Apply with `wrangler d1 migrations apply roshi-conversations --local` (dev) and `--remote` (prod). D1 free tier (5 GB, 5 M rows read/day) is vastly more than a personal conversation index needs.
+Apply with `wrangler d1 migrations apply roshi --local` (dev) and `--remote` (prod). D1 free tier (5 GB, 5 M rows read/day) is vastly more than a personal conversation index needs.
 
 ### Durable Objects — one new class, one new migration tag
 
@@ -133,13 +133,13 @@ Deployment implications:
 
 ```bash
 # 1. Create the D1 database; paste database_id into wrangler.jsonc
-wrangler d1 create roshi-conversations
+wrangler d1 create roshi
 
 # 2. Create + apply the conversations-table migration (local and remote)
-wrangler d1 migrations create roshi-conversations create_conversations
+wrangler d1 migrations create roshi create_conversations
 #    ...edit the generated migrations/0001_create_conversations.sql...
-wrangler d1 migrations apply roshi-conversations --local
-wrangler d1 migrations apply roshi-conversations --remote
+wrangler d1 migrations apply roshi --local
+wrangler d1 migrations apply roshi --remote
 
 # 3. Set secrets (interactive prompts)
 wrangler secret put ROSHI_PASSWORD
