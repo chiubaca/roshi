@@ -16,13 +16,13 @@ import {
   type SetStateAction,
 } from "react";
 import { useAudioAnalyser } from "~/useAudioAnalyser";
+import type { SearchResult } from "~/conversation";
+import { useReducedMotion } from "~/useReducedMotion";
 
 const DEFAULT_MESH_COLORS = ["#09181d", "#16333a", "#416765", "#9eb9ae"];
 const LISTENING_COLORS = ["#1a100a", "#59341f", "#b76838", "#f2bc76"];
 const PULSE_COLORS_DEFAULT = ["#8fcfbd", "#62a998", "#b4e6d8", "#4f8f81"];
 const PULSE_COLORS_LISTENING = ["#f8c27d", "#ed9652", "#ffd49d", "#d87337"];
-
-type SearchResult = { title: string; url: string; snippet: string };
 
 function searchResults(output: unknown): SearchResult[] {
   if (!output || typeof output !== "object" || !("results" in output)) return [];
@@ -59,20 +59,6 @@ export function SearchToolChip({ output }: { output: unknown }) {
       )}
     </details>
   );
-}
-
-export function CitationText({ text }: { text: string }) {
-  const parts = text.split(/(\[[^\]]+\]\(https?:\/\/[^)]+\))/g);
-  return parts.map((part, index) => {
-    const match = /^\[([^\]]+)\]\((https?:\/\/[^)]+)\)$/.exec(part);
-    return match ? (
-      <a className="citation-link" key={index} href={match[2]} target="_blank" rel="noreferrer">
-        {match[1]}
-      </a>
-    ) : (
-      <span key={index}>{part}</span>
-    );
-  });
 }
 
 function blendPalettes(from: string[], to: string[], amount: number): string[] {
@@ -146,7 +132,6 @@ function ChatInner({
 
   const reducedMotion = useReducedMotion();
   const [colorBlend, setColorBlend] = useState(0);
-  const [autoSend, setAutoSend] = useState(false);
   const [isPinned, setIsPinned] = useState(true);
   const [voiceStarting, setVoiceStarting] = useState(false);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
@@ -209,22 +194,9 @@ function ChatInner({
     if (!finalText) return;
 
     const nextInput = inputRef.current ? `${inputRef.current} ${finalText}` : finalText;
-    if (autoSend && !isStreaming) {
-      setSubmissionError(null);
-      void sendMessage({ text: nextInput }).catch(() => {
-        setSubmissionError("Voice message wasn’t sent. Your words are back in the composer.");
-        inputRef.current = nextInput;
-        setInput(nextInput);
-      });
-      inputRef.current = "";
-      setInput("");
-      pinnedRef.current = true;
-      setIsPinned(true);
-      return;
-    }
     inputRef.current = nextInput;
     setInput(nextInput);
-  }, [autoSend, isStreaming, sendMessage, setInput, transcript]);
+  }, [setInput, transcript]);
 
   function resizeTextarea() {
     const textarea = textareaRef.current;
@@ -357,18 +329,23 @@ function ChatInner({
           <ArrowLeftIcon /> <span>Conversations</span>
         </Link>
         <span className="chat-brand">Roshi</span>
-        {isListening || isStreaming ? (
-          <span
-            className={`chat-status${isListening ? " listening" : ""}`}
-            role="status"
-            aria-label={isListening ? "Listening" : "Roshi is thinking"}
-          >
-            <i className="chat-status-dot" aria-hidden="true" />
-            <span>{isListening ? "Listening" : "Thinking"}</span>
-          </span>
-        ) : (
-          <span aria-hidden="true" />
-        )}
+        <div className="chat-header-actions">
+          {(isListening || isStreaming) && (
+            <span
+              className={`chat-status${isListening ? " listening" : ""}`}
+              role="status"
+              aria-label={isListening ? "Listening" : "Roshi is thinking"}
+            >
+              <i className="chat-status-dot" aria-hidden="true" />
+              <span>{isListening ? "Listening" : "Thinking"}</span>
+            </span>
+          )}
+          <form action="/logout" className="logout-form" method="post">
+            <button className="logout-button" type="submit">
+              Log out
+            </button>
+          </form>
+        </div>
       </header>
 
       <section className="chat-main" aria-label="Conversation">
@@ -450,7 +427,7 @@ function ChatInner({
                   requestAnimationFrame(resizeTextarea);
                 }}
                 onKeyDown={handleComposerKeyDown}
-                placeholder="Message Roshi"
+                placeholder={interimTranscript || "Message Roshi"}
                 aria-describedby="composer-status"
               />
             </div>
@@ -515,18 +492,6 @@ function ChatInner({
             >
               {submissionError || voiceErrorMessage || voiceStatus}
             </p>
-            <label className="auto-send" title="Send finalized speech without review">
-              <input
-                type="checkbox"
-                checked={autoSend}
-                onChange={(event) => setAutoSend(event.target.checked)}
-                disabled={isStreaming}
-              />
-              <span className="switch-track" aria-hidden="true">
-                <span className="switch-thumb" />
-              </span>
-              Send after speech
-            </label>
           </div>
         </form>
       </div>
@@ -578,7 +543,7 @@ function ThinkingIndicator() {
   );
 }
 
-function MessageMarkdown({ text }: { text: string }) {
+export function MessageMarkdown({ text }: { text: string }) {
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
@@ -601,18 +566,6 @@ function formatBrowserTool(type: string): string {
     "tool-browser_scrape": "Inspected a web page",
   };
   return labels[type] ?? "Reviewed a web page";
-}
-
-function useReducedMotion() {
-  const [reduced, setReduced] = useState(false);
-  useEffect(() => {
-    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const update = () => setReduced(media.matches);
-    update();
-    media.addEventListener("change", update);
-    return () => media.removeEventListener("change", update);
-  }, []);
-  return reduced;
 }
 
 function SvgIcon({ children, size = 18 }: { children: React.ReactNode; size?: number }) {

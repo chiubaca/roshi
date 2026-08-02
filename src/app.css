@@ -279,6 +279,24 @@
     text-transform: uppercase;
   }
 
+  .logout-form {
+    margin: 0;
+  }
+
+  .logout-button {
+    background: transparent;
+    border: 0;
+    color: var(--text-muted);
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.7rem;
+    padding: 0.55rem 0;
+  }
+
+  .logout-button:hover {
+    color: var(--text);
+  }
+
   .launcher-panel {
     backdrop-filter: blur(24px) saturate(120%);
     background: var(--surface);
@@ -698,6 +716,13 @@
     justify-self: end;
     letter-spacing: 0.04em;
     text-transform: uppercase;
+  }
+
+  .chat-header-actions {
+    align-items: center;
+    display: flex;
+    gap: 0.7rem;
+    justify-self: end;
   }
 
   .chat-status-dot {
@@ -1348,62 +1373,6 @@
 
   .voice-status.error {
     color: var(--danger-strong);
-  }
-
-  .auto-send {
-    align-items: center;
-    color: var(--text-muted);
-    cursor: pointer;
-    display: inline-flex;
-    flex: none;
-    font-size: 0.75rem;
-    gap: 0.45rem;
-    min-height: 32px;
-  }
-
-  .auto-send input {
-    height: 1px;
-    opacity: 0;
-    position: absolute;
-    width: 1px;
-  }
-
-  .switch-track {
-    background: rgb(255 255 255 / 10%);
-    border: 1px solid var(--border);
-    border-radius: 999px;
-    height: 16px;
-    padding: 2px;
-    transition:
-      background-color 160ms var(--ease),
-      border-color 160ms var(--ease);
-    width: 28px;
-  }
-
-  .switch-thumb {
-    background: var(--text-muted);
-    border-radius: 50%;
-    display: block;
-    height: 10px;
-    transition:
-      background-color 160ms var(--ease),
-      transform 160ms var(--ease);
-    width: 10px;
-  }
-
-  .auto-send input:checked + .switch-track {
-    background: rgb(159 217 198 / 22%);
-    border-color: rgb(159 217 198 / 38%);
-  }
-
-  .auto-send input:checked + .switch-track .switch-thumb {
-    background: var(--accent-strong);
-    transform: translateX(12px);
-  }
-
-  .auto-send input:focus-visible + .switch-track {
-    outline: 2px solid var(--accent-strong);
-    outline-offset: 3px;
   }
 
   .loading-conversation {
