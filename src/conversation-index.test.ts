@@ -1,7 +1,7 @@
 /// <reference types="@cloudflare/vitest-pool-workers/types" />
 
 import { env, exports } from "cloudflare:workers";
-import { runInDurableObject } from "cloudflare:test";
+import { runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
 import { describe, expect, it } from "vite-plus/test";
 
 const BASE_URL = "http://example.com";
@@ -127,6 +127,11 @@ describe("conversation index Worker boundary", () => {
       headers: { Upgrade: "websocket" },
     });
     expect(agent.status).toBe(404);
-    await expect(runInDurableObject(stub, async () => undefined)).rejects.toThrow("destroyed");
+    const destructionAlarm = await runInDurableObject(stub, async (_agent, state) =>
+      state.storage.getAlarm(),
+    );
+    expect(destructionAlarm).not.toBeNull();
+    await new Promise((resolve) => setTimeout(resolve, 5_100));
+    await expect(runDurableObjectAlarm(stub)).rejects.toThrow("destroyed");
   });
 });

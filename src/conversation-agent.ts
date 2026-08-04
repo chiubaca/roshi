@@ -114,6 +114,11 @@ export function createBrowserTools(browserBinding: BrowserRun) {
 
 export class ConversationAgent extends AIChatAgent<Env> {
   async destroyConversation(): Promise<void> {
+    // Let the remote RPC acknowledge before destroy() aborts this Agent's context.
+    await this.schedule(5, "destroyConversationNow", {});
+  }
+
+  async destroyConversationNow(): Promise<void> {
     await this.destroy();
   }
 
